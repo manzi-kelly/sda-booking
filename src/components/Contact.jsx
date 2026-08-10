@@ -157,6 +157,8 @@ const Contact = () => {
 
                 <a
                   href="#"
+                  onClick={(e) => e.preventDefault()}
+                  aria-label="Facebook"
                   className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center hover:scale-110 transition"
                 >
                   <FaFacebookF />
@@ -164,6 +166,8 @@ const Contact = () => {
 
                 <a
                   href="#"
+                  onClick={(e) => e.preventDefault()}
+                  aria-label="Instagram"
                   className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center hover:scale-110 transition"
                 >
                   <FaInstagram />
@@ -171,6 +175,8 @@ const Contact = () => {
 
                 <a
                   href="#"
+                  onClick={(e) => e.preventDefault()}
+                  aria-label="LinkedIn"
                   className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center hover:scale-110 transition"
                 >
                   <FaLinkedinIn />

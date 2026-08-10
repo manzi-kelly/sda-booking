@@ -1,9 +1,13 @@
 import React, { useEffect, useRef } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { FaArrowRight, FaCheckCircle } from "react-icons/fa";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
+import { goToSection } from "../utils/navigation";
 
 const About = () => {
   const { t } = useLanguage();
+  const navigate = useNavigate();
+  const location = useLocation();
   const sectionRef = useRef(null);
 
   useEffect(() => {
@@ -103,6 +107,10 @@ const About = () => {
 
             <a
               href="#services"
+              onClick={(e) => {
+                e.preventDefault()
+                goToSection(navigate, location, "services")
+              }}
               className="inline-flex items-center gap-3 text-primary font-semibold hover:gap-4 transition-all"
             >
               {t("about.explore")}

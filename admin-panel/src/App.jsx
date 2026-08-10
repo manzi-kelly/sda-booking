@@ -31,6 +31,7 @@ function App() {
           </AdminRoute>
         }
       />
+      <Route path="*" element={<Navigate to="/admin" replace />} />
     </Routes>
   )
 }

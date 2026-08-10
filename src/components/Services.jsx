@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FaBookOpen,
   FaGlobe,
@@ -9,10 +10,14 @@ import {
   FaHandsHelping,
 } from "react-icons/fa";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
+import AuthPage from "../pages/AuthPage";
+import { openBooking } from "../utils/navigation";
 
 const Services = () => {
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const sectionRef = useRef(null);
+  const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -67,6 +72,7 @@ const Services = () => {
   ];
 
   return (
+    <>
     <section
       id="services"
       ref={sectionRef}
@@ -147,12 +153,12 @@ const Services = () => {
 
           <div className="slide-up text-right">
 
-            <a
-              href="#booking"
+            <button
+              onClick={() => openBooking(navigate, () => setShowAuth(true))}
               className="inline-block bg-blue-600 text-white px-10 py-4 rounded-full font-semibold hover:bg-blue-700 hover:scale-105 transition-all duration-300 shadow-lg shadow-blue-600/30"
             >
               {t("services.reserveCta")}
-            </a>
+            </button>
 
           </div>
 
@@ -160,6 +166,8 @@ const Services = () => {
 
       </div>
     </section>
+    {showAuth && <AuthPage onClose={() => setShowAuth(false)} />}
+    </>
   );
 };
 

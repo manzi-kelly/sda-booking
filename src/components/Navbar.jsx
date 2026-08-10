@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { FaBars, FaTimes } from 'react-icons/fa'
 import AuthPage from '../pages/AuthPage'
 import LanguageSwitcher from './LanguageSwitcher'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
+import { goToSection, openBooking } from '../utils/navigation'
 
 const Navbar = () => {
   const { t } = useLanguage()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [activeLink, setActiveLink] = useState('home')
@@ -25,7 +29,7 @@ const Navbar = () => {
       
       setIsScrolled(currentScrollY > 20)
       
-      const sections = ['home', 'about', 'services', 'pricing', 'contact']
+      const sections = ['home', 'about', 'services', 'contact']
       const scrollY = currentScrollY + 120
       for (const id of sections) {
         const el = document.getElementById(id)
@@ -46,19 +50,24 @@ const Navbar = () => {
     { id: 'home', label: t('nav.home') },
     { id: 'about', label: t('nav.about') },
     { id: 'services', label: t('nav.services') },
-    { id: 'pricing', label: t('nav.products') },
+    { id: 'products', label: t('nav.products'), isProducts: true },
     { id: 'contact', label: t('nav.contact') },
   ]
 
-  const handleLinkClick = (id) => {
-    setActiveLink(id)
+  const handleNavClick = (e, link) => {
+    e.preventDefault()
     setIsMobileMenuOpen(false)
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+    if (link.isProducts) {
+      openBooking(navigate, () => setShowAuth(true))
+      return
+    }
+    setActiveLink(link.id)
+    goToSection(navigate, location, link.id)
   }
 
   const handleBookNow = () => {
-    setShowAuth(true)
     setIsMobileMenuOpen(false)
+    openBooking(navigate, () => setShowAuth(true))
   }
 
   return (
@@ -73,9 +82,12 @@ const Navbar = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-20 md:h-24">
           {/* Logo */}
           <div className="flex items-center">
-            <a 
-              href="#home" 
-              onClick={() => handleLinkClick('home')} 
+            <Link 
+              to="/" 
+              onClick={() => {
+                setActiveLink('home')
+                setIsMobileMenuOpen(false)
+              }} 
               className="flex items-center gap-3 hover:opacity-80 transition-opacity"
             >
               <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-bold text-lg md:text-xl border transition-all duration-300 ${
@@ -97,23 +109,23 @@ const Navbar = () => {
                   {t('brand.tagline')}
                 </p>
               </div>
-            </a>
+            </Link>
           </div>
 
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center space-x-8 lg:space-x-10">
-            {navLinks.map(({ id, label }) => (
+            {navLinks.map((link) => (
               <a
-                key={id}
-                href={`#${id}`}
-                onClick={() => handleLinkClick(id)}
+                key={link.id}
+                href={link.isProducts ? '/dashboard' : `#${link.id}`}
+                onClick={(e) => handleNavClick(e, link)}
                 className={`nav-link ${
-                  activeLink === id ? 'active' : ''
+                  activeLink === link.id ? 'active' : ''
                 } text-sm font-medium transition-colors duration-300 uppercase tracking-wide ${
                   isScrolled ? 'text-gray-600 hover:text-primary' : 'text-white/90 hover:text-white'
                 }`}
               >
-                {label}
+                {link.label}
               </a>
             ))}
             <LanguageSwitcher variant={isScrolled ? 'light' : 'dark'} />
@@ -173,20 +185,20 @@ const Navbar = () => {
               isScrolled ? 'border-gray-200' : 'border-white/20'
             }`}></div>
             
-            {navLinks.map(({ id, label }) => (
+            {navLinks.map((link) => (
               <a
-                key={id}
-                href={`#${id}`}
-                onClick={() => handleLinkClick(id)}
+                key={link.id}
+                href={link.isProducts ? '/dashboard' : `#${link.id}`}
+                onClick={(e) => handleNavClick(e, link)}
                 className={`text-lg font-medium transition-colors duration-300 py-2 w-full text-center border-b ${
-                  activeLink === id 
+                  activeLink === link.id 
                     ? isScrolled ? 'text-primary' : 'text-white' 
                     : isScrolled ? 'text-gray-700' : 'text-white/80'
                 } hover:text-primary transition-colors duration-300 ${
                   isScrolled ? 'border-gray-100' : 'border-white/10'
                 }`}
               >
-                {label}
+                {link.label}
               </a>
             ))}
             <LanguageSwitcher variant={isScrolled ? 'light' : 'dark'} />

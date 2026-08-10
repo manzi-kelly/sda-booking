@@ -1,9 +1,13 @@
 import React, { useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { FaFacebookF, FaTwitter, FaInstagram, FaLinkedinIn, FaMapMarkerAlt, FaPhone, FaEnvelope } from 'react-icons/fa'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
+import { goToSection } from '../utils/navigation'
 
 const Footer = () => {
   const { t } = useLanguage()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [email, setEmail] = useState('')
   const year = new Date().getFullYear()
 
@@ -12,6 +16,23 @@ const Footer = () => {
     console.log('Email subscribed:', email)
     setEmail('')
   }
+
+  const handleQuickLink = (e, id, isProducts) => {
+    e.preventDefault()
+    if (isProducts) {
+      navigate('/dashboard')
+      return
+    }
+    goToSection(navigate, location, id)
+  }
+
+  const quickLinks = [
+    { id: 'home', label: t('nav.home') },
+    { id: 'about', label: t('footer.aboutUs') },
+    { id: 'services', label: t('nav.services') },
+    { id: 'products', label: t('nav.products'), isProducts: true },
+    { id: 'contact', label: t('nav.contact') },
+  ]
 
   return (
     <footer className="bg-gray-900 text-white/80 mt-auto">
@@ -27,16 +48,16 @@ const Footer = () => {
               {t('footer.description')}
             </p>
             <div className="flex gap-3">
-              <a href="#" className="w-9 h-9 rounded-full bg-gray-800 hover:bg-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
+              <a href="#" onClick={(e) => e.preventDefault()} aria-label="Facebook" className="w-9 h-9 rounded-full bg-gray-800 hover:bg-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
                 <FaFacebookF size={14} />
               </a>
-              <a href="#" className="w-9 h-9 rounded-full bg-gray-800 hover:bg-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
+              <a href="#" onClick={(e) => e.preventDefault()} aria-label="Twitter" className="w-9 h-9 rounded-full bg-gray-800 hover:bg-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
                 <FaTwitter size={14} />
               </a>
-              <a href="#" className="w-9 h-9 rounded-full bg-gray-800 hover:bg-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
+              <a href="#" onClick={(e) => e.preventDefault()} aria-label="Instagram" className="w-9 h-9 rounded-full bg-gray-800 hover:bg-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
                 <FaInstagram size={14} />
               </a>
-              <a href="#" className="w-9 h-9 rounded-full bg-gray-800 hover:bg-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
+              <a href="#" onClick={(e) => e.preventDefault()} aria-label="LinkedIn" className="w-9 h-9 rounded-full bg-gray-800 hover:bg-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
                 <FaLinkedinIn size={14} />
               </a>
             </div>
@@ -46,11 +67,17 @@ const Footer = () => {
           <div>
             <h4 className="text-white font-semibold text-lg mb-4">{t('footer.quickLinks')}</h4>
             <ul className="space-y-2 text-sm">
-              <li><a href="#home" className="text-gray-400 hover:text-white transition-colors">{t('nav.home')}</a></li>
-              <li><a href="#about" className="text-gray-400 hover:text-white transition-colors">{t('footer.aboutUs')}</a></li>
-              <li><a href="#services" className="text-gray-400 hover:text-white transition-colors">{t('nav.services')}</a></li>
-              <li><a href="#portfolio" className="text-gray-400 hover:text-white transition-colors">{t('nav.products')}</a></li>
-              <li><a href="#contact" className="text-gray-400 hover:text-white transition-colors">{t('nav.contact')}</a></li>
+              {quickLinks.map((link) => (
+                <li key={link.id}>
+                  <a
+                    href={link.isProducts ? '/dashboard' : `#${link.id}`}
+                    onClick={(e) => handleQuickLink(e, link.id, link.isProducts)}
+                    className="text-gray-400 hover:text-white transition-colors"
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
             </ul>
           </div>
 
@@ -101,8 +128,8 @@ const Footer = () => {
         <div className="py-6 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-500">
           <p>{t('footer.rights', { year })}</p>
           <div className="flex gap-6">
-            <a href="#" className="hover:text-white transition-colors">{t('footer.privacy')}</a>
-            <a href="#" className="hover:text-white transition-colors">{t('footer.terms')}</a>
+            <a href="#" onClick={(e) => e.preventDefault()} className="hover:text-white transition-colors">{t('footer.privacy')}</a>
+            <a href="#" onClick={(e) => e.preventDefault()} className="hover:text-white transition-colors">{t('footer.terms')}</a>
           </div>
         </div>
       </div>
