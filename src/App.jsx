@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage'
 import BookingDashboard from './pages/BookingDashboard'
 import AdminLogin from './pages/AdminLogin'
 import AdminPanel from './pages/AdminPanel'
+import NotFound from './pages/NotFound'
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -70,7 +71,7 @@ function App() {
           </AdminRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }

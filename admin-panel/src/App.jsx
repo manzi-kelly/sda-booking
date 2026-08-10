@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import AdminLogin from './pages/AdminLogin'
 import AdminPanel from './pages/AdminPanel'
 import AdminBooks from './pages/AdminBooks'
+import NotFound from './pages/NotFound'
 
 const AdminRoute = ({ children }) => {
   if (localStorage.getItem('isAdminLoggedIn') !== 'true') {
@@ -31,7 +32,7 @@ function App() {
           </AdminRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/admin" replace />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }
