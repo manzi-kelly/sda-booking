@@ -315,6 +315,14 @@ const AuthPage = ({ onClose }) => {
     navigate('/dashboard');
   };
 
+  const continueWithoutAccount = () => {
+    localStorage.setItem('user', JSON.stringify({ name: 'Guest', email: '', phone: '' }));
+    localStorage.setItem('isLoggedIn', 'true');
+    localStorage.setItem('isGuest', 'true');
+    if (onClose) onClose();
+    navigate('/dashboard');
+  };
+
   const Spinner = () => (
     <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -576,6 +584,20 @@ const AuthPage = ({ onClose }) => {
                 {mode === "login" || mode === "forgot" ? t("auth.createAccount") : t("auth.login")}
               </button>
             </p>
+
+            <div className="mt-5 flex items-center gap-3">
+              <span className="h-px flex-1 bg-gray-200"></span>
+              <span className="text-[11px] text-gray-400 uppercase tracking-wide">{t("auth.or")}</span>
+              <span className="h-px flex-1 bg-gray-200"></span>
+            </div>
+
+            <button
+              onClick={continueWithoutAccount}
+              className="mt-5 w-full py-3.5 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm transition-all hover:border-primary hover:text-primary hover:bg-primary/5 flex items-center justify-center gap-2"
+            >
+              <FaUser className="text-primary/60" />
+              {t("auth.continueWithoutAccount")}
+            </button>
             </>
           )}
           </div>

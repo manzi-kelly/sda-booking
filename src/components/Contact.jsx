@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import {
   FaPhoneAlt,
   FaEnvelope,
@@ -10,29 +10,12 @@ import {
   FaPaperPlane,
 } from "react-icons/fa";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
+import SectionHeader from "./ui/SectionHeader";
+import useReveal from "../hooks/useReveal";
 
 const Contact = () => {
   const { t } = useLanguage();
-  const sectionRef = useRef(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target
-              .querySelectorAll(".slide-up")
-              .forEach((el) => el.classList.add("visible"));
-          }
-        });
-      },
-      { threshold: 0.2 }
-    );
-
-    if (sectionRef.current) observer.observe(sectionRef.current);
-
-    return () => observer.disconnect();
-  }, []);
+  const sectionRef = useReveal(0.2);
 
   return (
     <section
@@ -44,20 +27,12 @@ const Contact = () => {
 
         {/* Heading */}
 
-        <div className="text-center mb-20 slide-up">
-
-          <span className="text-primary uppercase tracking-[5px] font-semibold">
-            {t("contact.badge")}
-          </span>
-
-          <h2 className="mt-4 text-4xl md:text-5xl font-bold text-gray-900">
-            {t("contact.title")}
-          </h2>
-
-          <p className="mt-5 text-gray-600 max-w-2xl mx-auto leading-8">
-            {t("contact.description")}
-          </p>
-
+        <div className="mb-20">
+          <SectionHeader
+            badge={t("contact.badge")}
+            title={t("contact.title")}
+            subtitle={t("contact.description")}
+          />
         </div>
 
         <div className="grid lg:grid-cols-2 gap-16">

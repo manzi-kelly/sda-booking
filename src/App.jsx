@@ -1,10 +1,17 @@
-import React, { useEffect, useState } from 'react'
+import React, { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import HomePage from './pages/HomePage'
-import BookingDashboard from './pages/BookingDashboard'
-import AdminLogin from './pages/AdminLogin'
-import AdminPanel from './pages/AdminPanel'
-import NotFound from './pages/NotFound'
+
+const HomePage = lazy(() => import('./pages/HomePage'))
+const BookingDashboard = lazy(() => import('./pages/BookingDashboard'))
+const AdminLogin = lazy(() => import('./pages/AdminLogin'))
+const AdminPanel = lazy(() => import('./pages/AdminPanel'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+
+const PageFallback = () => (
+  <div className="min-h-screen flex items-center justify-center bg-white">
+    <div className="w-10 h-10 rounded-full border-4 border-teal-500 border-t-transparent animate-spin" />
+  </div>
+)
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -28,6 +35,7 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('isLoggedIn')
     localStorage.removeItem('user')
+    localStorage.removeItem('isGuest')
     setIsLoggedIn(false)
     setUser(null)
   }
@@ -52,27 +60,29 @@ function App() {
   }
 
   return (
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route 
-        path="/dashboard" 
-        element={
-          <ProtectedRoute>
-            <BookingDashboard user={user} onLogout={handleLogout} />
-          </ProtectedRoute>
-        } 
-      />
-      <Route path="/admin" element={<AdminLogin />} />
-      <Route
-        path="/admin/panel"
-        element={
-          <AdminRoute>
-            <AdminPanel />
-          </AdminRoute>
-        }
-      />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <Suspense fallback={<PageFallback />}>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route 
+          path="/dashboard" 
+          element={
+            <ProtectedRoute>
+              <BookingDashboard user={user} onLogout={handleLogout} />
+            </ProtectedRoute>
+          } 
+        />
+        <Route path="/admin" element={<AdminLogin />} />
+        <Route
+          path="/admin/panel"
+          element={
+            <AdminRoute>
+              <AdminPanel />
+            </AdminRoute>
+          }
+        />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </Suspense>
   )
 }
 

@@ -1,6 +1,6 @@
 export const PRODUCTS_ROUTE = '/dashboard'
 
-export const HOME_SECTIONS = ['home', 'about', 'services', 'contact']
+export const HOME_SECTIONS = ['home', 'about', 'contact']
 
 export const isLoggedIn = () => localStorage.getItem('isLoggedIn') === 'true'
 

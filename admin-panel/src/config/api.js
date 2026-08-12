@@ -2,6 +2,11 @@ export const API_URL = 'http://localhost:5000'
 
 export const getAdminToken = () => localStorage.getItem('admin_token')
 
+export const clearAdminSession = () => {
+  localStorage.removeItem('isAdminLoggedIn')
+  localStorage.removeItem('admin_token')
+}
+
 export const adminFetch = async (path, options = {}) => {
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -12,6 +17,10 @@ export const adminFetch = async (path, options = {}) => {
     }
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || 'Request failed')
+  if (!res.ok) {
+    const err = new Error(data.error || 'Request failed')
+    err.status = res.status
+    throw err
+  }
   return data
 }

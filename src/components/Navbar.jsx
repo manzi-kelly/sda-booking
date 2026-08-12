@@ -1,10 +1,18 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { FaBars, FaTimes } from 'react-icons/fa'
-import AuthPage from '../pages/AuthPage'
+import { FaBars, FaTimes, FaSearch } from 'react-icons/fa'
 import LanguageSwitcher from './LanguageSwitcher'
+import SearchOverlay from './SearchOverlay'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { goToSection, openBooking } from '../utils/navigation'
+
+const AuthPage = lazy(() => import('../pages/AuthPage'))
+
+const AuthModal = ({ onClose }) => (
+  <Suspense fallback={null}>
+    <AuthPage onClose={onClose} />
+  </Suspense>
+)
 
 const Navbar = () => {
   const { t } = useLanguage()
@@ -16,6 +24,7 @@ const Navbar = () => {
   const [isVisible, setIsVisible] = useState(true)
   const [lastScrollY, setLastScrollY] = useState(0)
   const [showAuth, setShowAuth] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
 
   useEffect(() => {
     const handleScroll = () => {
@@ -29,7 +38,7 @@ const Navbar = () => {
       
       setIsScrolled(currentScrollY > 20)
       
-      const sections = ['home', 'about', 'services', 'contact']
+      const sections = ['home', 'about', 'contact']
       const scrollY = currentScrollY + 120
       for (const id of sections) {
         const el = document.getElementById(id)
@@ -49,7 +58,6 @@ const Navbar = () => {
   const navLinks = [
     { id: 'home', label: t('nav.home') },
     { id: 'about', label: t('nav.about') },
-    { id: 'services', label: t('nav.services') },
     { id: 'products', label: t('nav.products'), isProducts: true },
     { id: 'contact', label: t('nav.contact') },
   ]
@@ -67,6 +75,11 @@ const Navbar = () => {
 
   const handleBookNow = () => {
     setIsMobileMenuOpen(false)
+    openBooking(navigate, () => setShowAuth(true))
+  }
+
+  const handleSearchSelect = () => {
+    setShowSearch(false)
     openBooking(navigate, () => setShowAuth(true))
   }
 
@@ -128,6 +141,15 @@ const Navbar = () => {
                 {link.label}
               </a>
             ))}
+            <button
+              onClick={() => setShowSearch(true)}
+              aria-label={t('aria.searchBooks')}
+              className={`p-2.5 rounded-full transition-colors ${
+                isScrolled ? 'text-gray-600 hover:text-primary hover:bg-gray-100' : 'text-white/90 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <FaSearch size={17} />
+            </button>
             <LanguageSwitcher variant={isScrolled ? 'light' : 'dark'} />
             <button
               onClick={handleBookNow}
@@ -141,15 +163,26 @@ const Navbar = () => {
             </button>
           </nav>
           {/* Mobile hamburger */}
-          <button
-            className={`md:hidden focus:outline-none p-2 rounded-lg transition-colors ${
-              isScrolled ? 'text-gray-700 hover:bg-gray-100' : 'text-white hover:bg-white/10'
-            }`}
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            aria-label={t('aria.toggleMenu')}
-          >
-            {isMobileMenuOpen ? <FaTimes size={24} /> : <FaBars size={24} />}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              className={`md:hidden focus:outline-none p-2 rounded-lg transition-colors ${
+                isScrolled ? 'text-gray-700 hover:bg-gray-100' : 'text-white hover:bg-white/10'
+              }`}
+              onClick={() => setShowSearch(true)}
+              aria-label={t('aria.searchBooks')}
+            >
+              <FaSearch size={20} />
+            </button>
+            <button
+              className={`md:hidden focus:outline-none p-2 rounded-lg transition-colors ${
+                isScrolled ? 'text-gray-700 hover:bg-gray-100' : 'text-white hover:bg-white/10'
+              }`}
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              aria-label={t('aria.toggleMenu')}
+            >
+              {isMobileMenuOpen ? <FaTimes size={24} /> : <FaBars size={24} />}
+            </button>
+          </div>
         </div>
 
         {/* Mobile menu */}
@@ -213,7 +246,15 @@ const Navbar = () => {
       </header>
 
       {/* Auth Modal */}
-      {showAuth && <AuthPage onClose={() => setShowAuth(false)} />}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+
+      {/* Search Modal */}
+      {showSearch && (
+        <SearchOverlay
+          onClose={() => setShowSearch(false)}
+          onSelectBook={handleSearchSelect}
+        />
+      )}
     </>
   )
 }

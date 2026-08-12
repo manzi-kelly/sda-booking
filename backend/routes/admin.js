@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import admin from 'firebase-admin'
 import { db } from '../config/firebase.js'
 import { broadcastBooksChanged } from '../lib/broadcast.js'
+import { sendBookArrived, sendBookArrivedToAdmin } from '../lib/mailer.js'
 
 const router = Router()
 const bookingsCol = db.collection('bookings')
@@ -206,12 +207,33 @@ router.patch('/bookings/:id', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' })
     }
 
-    await docRef.update({
-      status: String(status),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    })
+    const nextStatus = String(status)
+    const isDelivery = nextStatus === 'Delivered' || nextStatus === 'Complete'
 
-    res.json({ id: req.params.id, status: String(status) })
+    const updates = {
+      status: nextStatus,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }
+    if (isDelivery && !doc.data().deliveredAt) {
+      updates.deliveredAt = admin.firestore.FieldValue.serverTimestamp()
+    }
+    await docRef.update(updates)
+
+    // When the book arrives at the church, notify the customer and the admin by email.
+    if (isDelivery) {
+      try {
+        const updatedDoc = await docRef.get()
+        if (updatedDoc.exists) {
+          const data = { id: req.params.id, ...updatedDoc.data() }
+          await sendBookArrived(data)
+          await sendBookArrivedToAdmin(data)
+        }
+      } catch (err) {
+        console.warn('[admin] Arrival email failed:', err.message)
+      }
+    }
+
+    res.json({ id: req.params.id, status: nextStatus })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

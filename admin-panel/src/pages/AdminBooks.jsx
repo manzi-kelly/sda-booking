@@ -17,7 +17,7 @@ import {
   FaStore,
   FaUpload
 } from 'react-icons/fa'
-import { adminFetch, API_URL } from '../config/api'
+import { adminFetch, clearAdminSession, API_URL } from '../config/api'
 import { books as fallbackBooks } from '../data/books'
 
 const formatPrice = (n) => 'RWF ' + Number(n || 0).toLocaleString()
@@ -307,6 +307,11 @@ const AdminBooks = () => {
         loadBooks()
       }
     } catch (err) {
+      if (err.status === 401) {
+        clearAdminSession()
+        navigate('/admin', { replace: true })
+        return
+      }
       setBookError(err.message || 'Failed to save the book')
     } finally {
       setPostingBook(false)
@@ -320,6 +325,11 @@ const AdminBooks = () => {
       setPostedBooks((prev) => prev.filter((b) => b.id !== id))
       setToast({ type: 'danger', text: `"${title}" removed.` })
     } catch (err) {
+      if (err.status === 401) {
+        clearAdminSession()
+        navigate('/admin', { replace: true })
+        return
+      }
       setToast({ type: 'danger', text: err.message || 'Failed to remove the book' })
     }
   }

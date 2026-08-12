@@ -29,7 +29,6 @@ const Footer = () => {
   const quickLinks = [
     { id: 'home', label: t('nav.home') },
     { id: 'about', label: t('footer.aboutUs') },
-    { id: 'services', label: t('nav.services') },
     { id: 'products', label: t('nav.products'), isProducts: true },
     { id: 'contact', label: t('nav.contact') },
   ]

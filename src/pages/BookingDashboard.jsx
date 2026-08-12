@@ -5,616 +5,1374 @@ import {
   FaSignOutAlt,
   FaBell,
   FaCheckCircle,
-  FaMapMarkerAlt,
-  FaUser,
   FaHistory,
   FaClock,
   FaShoppingCart,
-  FaTrash,
   FaMinus,
   FaPlus,
-  FaLock
+  FaLock,
+  FaSearch,
+  FaArrowRight
 } from 'react-icons/fa';
+
 import { books as fallbackBooks } from '../data/books';
 import CheckoutForm from '../components/CheckoutForm';
+import SearchOverlay from '../components/SearchOverlay';
+import SectionHeader from '../components/ui/SectionHeader';
+import CTAButton from '../components/ui/CTAButton';
+import BookCard from '../components/ui/BookCard';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_URL =
+  import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-const formatPrice = (n) => 'RWF ' + Number(n || 0).toLocaleString();
+const formatPrice = (value) => {
+  return `RWF ${Number(value || 0).toLocaleString()}`;
+};
+
+const formatDate = (value) => {
+  if (!value) return '';
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
+};
 
 const BookingDashboard = ({ user, onLogout }) => {
+  const { t } = useLanguage();
   const navigate = useNavigate();
-  const [showForm, setShowForm] = useState(false);
-  const [selectedBook, setSelectedBook] = useState(null);
-  const [toast, setToast] = useState(null);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showBookings, setShowBookings] = useState(false);
-  const [bookingTab, setBookingTab] = useState('waiting');
-  const [bookings, setBookings] = useState([]);
-  const [cart, setCart] = useState(() => JSON.parse(localStorage.getItem('cart')) || []);
-  const [showCart, setShowCart] = useState(false);
-  const [showCheckout, setShowCheckout] = useState(false);
-  const [postedBooks, setPostedBooks] = useState([]);
-  const [fromDb, setFromDb] = useState(false);
-  const bellRef = useRef(null);
 
-  const mapBooks = (items) =>
-    (Array.isArray(items) ? items : []).map((b) => ({
-      id: b.id,
-      title: b.title || '',
-      author: b.author || '',
-      category: b.category || 'Book',
-      description: b.description || '',
-      image: b.image,
-      gradient: b.gradient || 'from-teal-500 to-emerald-700',
-      copies: Number(b.copies) || 1,
-      price: Number(b.price) || 0
-    }));
-
-  const fetchBooks = () => {
-    fetch(`${API_URL}/api/books`)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((items) => {
-        if (!Array.isArray(items)) return;
-        setPostedBooks(mapBooks(items));
-        setFromDb(true);
-      })
-      .catch(() => {});
-  };
-
+  // Dynamic browser tab title.
   useEffect(() => {
-    fetchBooks();
-
-    let source;
-    try {
-      source = new EventSource(`${API_URL}/api/books/events`);
-      source.addEventListener('books-changed', () => fetchBooks());
-    } catch {
-      source = null;
-    }
-
-    const onFocus = () => fetchBooks();
-    window.addEventListener('focus', onFocus);
-    const interval = setInterval(fetchBooks, 30000);
+    const storeName = t('dashboard.storeName') || 'Bookstore';
+    document.title = `${storeName} | Dashboard`;
 
     return () => {
-      if (source) source.close();
-      window.removeEventListener('focus', onFocus);
-      clearInterval(interval);
+      document.title = 'Bookstore';
+    };
+  }, [t]);
+
+  const [toast, setToast] = useState(null);
+
+  const [showNotifications, setShowNotifications] =
+    useState(false);
+
+  const [showBookings, setShowBookings] =
+    useState(false);
+
+  const [bookingTab, setBookingTab] =
+    useState('waiting');
+
+  const [bookings, setBookings] = useState(() => {
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem('bookings') || '[]'
+      );
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [cart, setCart] = useState(() => {
+    try {
+      return JSON.parse(
+        localStorage.getItem('cart') || '[]'
+      );
+    } catch {
+      return [];
+    }
+  });
+
+  const [showCart, setShowCart] = useState(false);
+
+  const [showCheckout, setShowCheckout] =
+    useState(false);
+
+  const [showSearch, setShowSearch] =
+    useState(false);
+
+  const [postedBooks, setPostedBooks] =
+    useState([]);
+
+  const [fromDb, setFromDb] =
+    useState(false);
+
+  const bellRef = useRef(null);
+
+  /*
+   * ==========================================================
+   * BOOK DATA
+   * ==========================================================
+   */
+
+  const mapBooks = (items) => {
+    if (!Array.isArray(items)) return [];
+
+    return items.map((book, index) => ({
+      id: book?.id ?? `book-${index}`,
+      title: book?.title || 'Untitled Book',
+      author: book?.author || '',
+      category: book?.category || 'Book',
+      description: book?.description || '',
+      image: book?.image || '',
+      gradient:
+        book?.gradient ||
+        'from-teal-600 to-emerald-800',
+      copies: Math.max(0, Number(book?.copies) || 0),
+      price: Math.max(0, Number(book?.price) || 0)
+    }));
+  };
+
+  /*
+   * ==========================================================
+   * FETCH BOOKS
+   * ==========================================================
+   */
+
+  const booksRequestRef = useRef(null);
+  const booksAbortRef = useRef(null);
+
+  const fetchBooks = async ({ force = false } = {}) => {
+    // Never allow multiple identical requests to run at the same time.
+    if (booksRequestRef.current && !force) {
+      return booksRequestRef.current;
+    }
+
+    if (force && booksAbortRef.current) {
+      booksAbortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    booksAbortRef.current = controller;
+
+    const request = (async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/books`, {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+          cache: 'no-store'
+        });
+
+        if (!response.ok) {
+          throw new Error(`Books request failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (Array.isArray(data)) {
+          const mapped = mapBooks(data);
+          setPostedBooks(mapped);
+          setFromDb(true);
+
+          // Keep the latest successful result for instant next visit.
+          try {
+            sessionStorage.setItem(
+              'books-cache',
+              JSON.stringify(mapped)
+            );
+          } catch {
+            // Storage may be disabled; the UI still works.
+          }
+        }
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          console.warn('Books API unavailable. Using cached/local books.');
+        }
+      } finally {
+        if (booksRequestRef.current === request) {
+          booksRequestRef.current = null;
+        }
+        if (booksAbortRef.current === controller) {
+          booksAbortRef.current = null;
+        }
+      }
+    })();
+
+    booksRequestRef.current = request;
+    return request;
+  };
+
+  /*
+   * ==========================================================
+   * INITIAL LOAD
+   * ==========================================================
+   */
+
+  useEffect(() => {
+    let eventSource = null;
+    let refreshTimer = null;
+    let disposed = false;
+
+    // Render cached books immediately; network refresh happens in background.
+    try {
+      const cached = JSON.parse(
+        sessionStorage.getItem('books-cache') || 'null'
+      );
+
+      if (Array.isArray(cached) && cached.length > 0) {
+        setPostedBooks(cached);
+        setFromDb(true);
+      }
+    } catch {
+      // Ignore invalid cache.
+    }
+
+    // Do not block the first paint on the API.
+    fetchBooks();
+
+    // SSE is optional. If it is unavailable, the dashboard keeps working.
+    try {
+      eventSource = new EventSource(`${API_URL}/api/books/events`);
+
+      eventSource.addEventListener('books-changed', () => {
+        if (!disposed) fetchBooks({ force: true });
+      });
+
+      eventSource.onerror = () => {
+        // Close a broken SSE connection instead of repeatedly retrying.
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+      };
+    } catch {
+      eventSource = null;
+    }
+
+    const handleFocus = () => {
+      if (!document.hidden) fetchBooks();
+    };
+
+    const handleVisibility = () => {
+      if (!document.hidden) fetchBooks();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Background refresh is intentionally infrequent to protect performance.
+    refreshTimer = window.setInterval(() => {
+      if (!document.hidden) fetchBooks();
+    }, 120000);
+
+    return () => {
+      disposed = true;
+
+      if (eventSource) eventSource.close();
+      if (refreshTimer) window.clearInterval(refreshTimer);
+
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+
+      if (booksAbortRef.current) {
+        booksAbortRef.current.abort();
+      }
     };
   }, []);
 
+  /*
+   * ==========================================================
+   * LOAD BOOKINGS
+   * ==========================================================
+   */
+
+  /*
+   * ==========================================================
+   * SAVE CART
+   * ==========================================================
+   */
+
   useEffect(() => {
-    setBookings(JSON.parse(localStorage.getItem('bookings')) || []);
-  }, []);
+    try {
+      localStorage.setItem('cart', JSON.stringify(cart));
+    } catch {
+      // Storage quota/private mode should never crash the dashboard.
+    }
+  }, [cart]);
+
+  /*
+   * ==========================================================
+   * TOAST
+   * ==========================================================
+   */
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 5000);
+
+    const timer = setTimeout(() => {
+      setToast(null);
+    }, 4000);
+
     return () => clearTimeout(timer);
   }, [toast]);
 
+  /*
+   * ==========================================================
+   * CLOSE NOTIFICATIONS
+   * ==========================================================
+   */
+
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (bellRef.current && !bellRef.current.contains(e.target)) {
+    const handleClickOutside = (event) => {
+      if (
+        bellRef.current &&
+        !bellRef.current.contains(event.target)
+      ) {
         setShowNotifications(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+
+    document.addEventListener(
+      'mousedown',
+      handleClickOutside
+    );
+
+    return () => {
+      document.removeEventListener(
+        'mousedown',
+        handleClickOutside
+      );
+    };
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem('cart', JSON.stringify(cart));
-  }, [cart]);
+  /*
+   * ==========================================================
+   * USER
+   * ==========================================================
+   */
 
-  const userName = user?.name || JSON.parse(localStorage.getItem('user') || '{}')?.name || 'User';
-  const userEmail = user?.email || JSON.parse(localStorage.getItem('user') || '{}')?.email;
+  const isGuest =
+    localStorage.getItem('isGuest') === 'true';
 
-  const myBookings = bookings.filter((b) => !userEmail || b.email === userEmail);
-  const waitingBookings = myBookings.filter((b) => b.status === 'New' || b.status === 'Pending');
+  let storedUser = {};
+  try {
+    storedUser =
+      JSON.parse(localStorage.getItem('user') || '{}') || {};
+  } catch {
+    storedUser = {};
+  }
+
+  const userName = isGuest
+    ? 'Guest'
+    : user?.name ||
+      storedUser?.name ||
+      'User';
+
+  const userEmail =
+    user?.email ||
+    storedUser?.email ||
+    '';
+
+  /*
+   * ==========================================================
+   * BOOKINGS
+   * ==========================================================
+   */
+
+  const myBookings = isGuest
+    ? []
+    : bookings.filter(
+        (booking) =>
+          !userEmail ||
+          booking?.email === userEmail
+      );
+
+  const waitingBookings = myBookings.filter(
+    (booking) =>
+      booking?.status === 'New' ||
+      booking?.status === 'Pending'
+  );
+
   const historyBookings = myBookings;
 
-  const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
-  const cartTotal = cart.reduce((sum, item) => sum + (item.book.price || 0) * item.qty, 0);
+  /*
+   * ==========================================================
+   * CART
+   * ==========================================================
+   */
 
-  const allBooks = fromDb ? postedBooks : fallbackBooks;
+  const cartCount = cart.reduce(
+    (total, item) =>
+      total + Math.max(0, Number(item?.qty) || 0),
+    0
+  );
+
+  const cartTotal = cart.reduce(
+    (total, item) =>
+      total +
+      Math.max(0, Number(item?.book?.price) || 0) *
+        Math.max(0, Number(item?.qty) || 0),
+    0
+  );
+
+  /*
+   * ==========================================================
+   * BOOKS
+   * ==========================================================
+   */
+
+  const allBooks = fromDb
+    ? postedBooks
+    : mapBooks(fallbackBooks);
+
+  /*
+   * ==========================================================
+   * STATUS LABEL
+   * ==========================================================
+   */
+
+  const statusLabel = (status) => {
+    const map = {
+      'New': t('dashboard.statusNew'),
+      'Pending': t('dashboard.statusPending'),
+      'Confirmed': t('dashboard.statusConfirmed'),
+      'Processing': t('dashboard.statusProcessing'),
+      'Delivered': t('dashboard.statusDelivered'),
+      'Complete': t('dashboard.statusComplete'),
+      'Cancelled': t('dashboard.statusCancelled'),
+      'Rejected': t('dashboard.statusRejected')
+    };
+    return map[status] || status || t('dashboard.statusPending');
+  };
+
+  /*
+   * ==========================================================
+   * PAYMENT METHOD LABEL
+   * ==========================================================
+   */
+
+  const paymentMethodLabel = (method) => {
+    const map = {
+      'airtel': t('checkout.airtelMoney'),
+      'momo': t('checkout.mtnMomo'),
+      'card': t('checkout.bankCard')
+    };
+    return map[method] || method || '';
+  };
+
+  /*
+   * ==========================================================
+   * LOGOUT
+   * ==========================================================
+   */
 
   const handleLogout = () => {
     localStorage.removeItem('user');
     localStorage.removeItem('isLoggedIn');
-    onLogout();
+    localStorage.removeItem('isGuest');
+
+    if (onLogout) {
+      onLogout();
+    }
+
     navigate('/');
   };
 
+  /*
+   * ==========================================================
+   * ADD TO CART
+   * ==========================================================
+   */
+
   const handleBookNow = (book) => {
-    setCart((prev) => {
-      const existing = prev.find((item) => item.book.id === book.id);
+    if (!book) return;
+
+    const copies = Number(book.copies || 0);
+
+    if (copies <= 0) {
+      setToast({
+        title: t('dashboard.bookUnavailable'),
+        message: t('dashboard.outOfStock')
+      });
+
+      return;
+    }
+
+    setCart((previousCart) => {
+      const existing =
+        previousCart.find(
+          (item) =>
+            item?.book?.id === book.id
+        );
+
       if (existing) {
-        return prev.map((item) =>
-          item.book.id === book.id ? { ...item, qty: item.qty + 1 } : item
+        if (existing.qty >= copies) {
+          return previousCart;
+        }
+
+        return previousCart.map((item) =>
+          item?.book?.id === book.id
+            ? {
+                ...item,
+                qty: item.qty + 1
+              }
+            : item
         );
       }
-      return [...prev, { book, qty: 1 }];
+
+      return [
+        ...previousCart,
+        {
+          book,
+          qty: 1
+        }
+      ];
     });
-    setToast({ title: book.title, message: 'has been added to your cart.' });
+
+    setToast({
+      title: t('dashboard.addedToCartTitle'),
+      message: `${book.title} ${t('dashboard.addedToCart')}`
+    });
   };
 
-  const updateQty = (id, delta) => {
-    setCart((prev) =>
-      prev
-        .map((item) => (item.book.id === id ? { ...item, qty: item.qty + delta } : item))
-        .filter((item) => item.qty > 0)
+  /*
+   * ==========================================================
+   * UPDATE CART QUANTITY
+   * ==========================================================
+   */
+
+  const updateQty = (id, change) => {
+    setCart((previousCart) =>
+      previousCart
+        .map((item) => {
+          if (item?.book?.id !== id) {
+            return item;
+          }
+
+          const maxCopies =
+            Number(item.book.copies || 0);
+
+          const newQty = Math.min(
+            maxCopies,
+            Math.max(
+              0,
+              Number(item.qty || 0) +
+                change
+            )
+          );
+
+          return {
+            ...item,
+            qty: newQty
+          };
+        })
+        .filter(
+          (item) =>
+            Number(item.qty || 0) > 0
+        )
     );
   };
 
+  /*
+   * ==========================================================
+   * REMOVE FROM CART
+   * ==========================================================
+   */
+
   const removeFromCart = (id) => {
-    setCart((prev) => prev.filter((item) => item.book.id !== id));
+    setCart((previousCart) =>
+      previousCart.filter(
+        (item) =>
+          item?.book?.id !== id
+      )
+    );
   };
 
-  const handleCheckoutComplete = (result) => {
+  /*
+   * ==========================================================
+   * CHECKOUT COMPLETE
+   * ==========================================================
+   */
+
+  const handleCheckoutComplete = (
+    result
+  ) => {
     setShowCheckout(false);
     setShowCart(false);
     setCart([]);
-    setBookings(JSON.parse(localStorage.getItem('bookings')) || []);
+
+    try {
+      const savedBookings =
+        JSON.parse(
+          localStorage.getItem(
+            'bookings'
+          ) || '[]'
+        );
+
+      setBookings(
+        Array.isArray(savedBookings)
+          ? savedBookings
+          : []
+      );
+    } catch {
+      setBookings([]);
+    }
+
     setToast({
-      title: 'Payment Successful!',
-      message: `Your payment of ${formatPrice(result.total)} via ${result.paymentMethod} was completed. Books confirmed and booked.`
+      title: t('dashboard.paymentSuccessful'),
+      message: t('dashboard.paymentMessage', {
+        total: formatPrice(result?.total || 0),
+        method: paymentMethodLabel(result?.paymentMethod) || '—'
+      })
     });
   };
 
+  /*
+   * ==========================================================
+   * SEARCH SELECT
+   * ==========================================================
+   */
+
+  const handleSearchSelect = (book) => {
+    if (!book) return;
+
+    setShowSearch(false);
+    handleBookNow(book);
+  };
+
+  /*
+   * ==========================================================
+   * RENDER
+   * ==========================================================
+   */
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4 flex justify-between items-center gap-2 sm:gap-3">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-bold flex-shrink-0">
-              S
+    <div className="min-h-screen bg-white">
+
+      {/* ======================================================
+          HEADER
+      ======================================================= */}
+
+      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur-xl">
+
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-3 py-3 sm:px-6 sm:py-4 lg:px-8">
+
+          {/* BRAND */}
+
+          <div className="flex min-w-0 items-center gap-3">
+
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-lg shadow-primary/20">
+              <FaBookOpen className="text-lg" />
             </div>
+
             <div className="min-w-0">
-              <h1 className="text-lg sm:text-xl font-bold text-gray-800 truncate">SDA Booking</h1>
-              <p className="text-[11px] sm:text-xs text-gray-500 truncate">
-                Welcome, <span className="text-primary font-semibold">{userName}</span>!
+
+              <h1 className="truncate text-lg font-extrabold tracking-tight text-gray-900 sm:text-xl">
+                {t('dashboard.storeName')}
+              </h1>
+
+              <p className="truncate text-xs text-gray-500">
+                {t('dashboard.welcomeUser', { name: userName })}
               </p>
+
             </div>
+
           </div>
 
-          <div className="flex items-center gap-1 sm:gap-2 md:gap-3 flex-shrink-0">
-            {/* Cart */}
+          {/* ACTIONS */}
+
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+
+            {/* SEARCH */}
+
             <button
-              onClick={() => setShowCart(true)}
-              className="p-2 sm:p-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full relative transition-colors"
-              aria-label="Cart"
+              type="button"
+              onClick={() =>
+                setShowSearch(true)
+              }
+              className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
+              aria-label={t('aria.searchBooks')}
             >
-              <FaShoppingCart size={20} />
+              <FaSearch />
+            </button>
+
+            {/* CART */}
+
+            <button
+              type="button"
+              onClick={() =>
+                setShowCart(true)
+              }
+              className="relative flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
+              aria-label={t('aria.cart')}
+            >
+              <FaShoppingCart />
+
               {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[1.15rem] h-[1.15rem] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-white ring-2 ring-white">
                   {cartCount}
                 </span>
               )}
             </button>
 
-            {/* Notifications */}
-            <div className="relative" ref={bellRef}>
+            {/* NOTIFICATIONS */}
+
+            <div
+              ref={bellRef}
+              className="relative"
+            >
+
               <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="p-2 sm:p-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full relative transition-colors"
-                aria-label="Notifications"
+                type="button"
+                onClick={() =>
+                  setShowNotifications(
+                    (value) => !value
+                  )
+                }
+                className="relative flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
+                aria-label={t('aria.notifications')}
               >
-                <FaBell size={20} />
-                {bookings.length > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                <FaBell />
+
+                {myBookings.length > 0 && (
+                  <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
                 )}
               </button>
 
               {showNotifications && (
-                <div className="absolute right-0 mt-3 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-slideUp">
-                  <div className="px-5 py-3.5 border-b border-gray-100">
-                    <h3 className="text-sm font-bold text-gray-800">Notifications</h3>
+                <div className="absolute right-0 mt-3 w-80 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
+
+                  <div className="border-b border-gray-100 px-5 py-4">
+                    <h3 className="font-bold text-gray-900">
+                      {t('dashboard.notifications')}
+                    </h3>
                   </div>
-                  <div className="max-h-72 overflow-y-auto">
-                    {bookings.length === 0 ? (
-                      <p className="px-5 py-8 text-center text-sm text-gray-500">
-                        No new notifications yet.
-                      </p>
+
+                  <div className="max-h-80 overflow-y-auto">
+
+                    {myBookings.length === 0 ? (
+                      <div className="px-5 py-10 text-center">
+
+                        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400">
+                          <FaBell />
+                        </div>
+
+                        <p className="text-sm text-gray-500">
+                          {t('dashboard.noNotifications')}
+                        </p>
+
+                      </div>
                     ) : (
-                      bookings.slice().reverse().slice(0, 5).map((b, i) => (
-                        <div key={i} className="px-5 py-3.5 border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                          <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                              <FaBookOpen className="text-primary text-sm" />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-gray-800 truncate">{b.title}</p>
-                              <p className="text-xs text-gray-500">
-                                {b.district} · {b.sector} · {b.status}
+                      myBookings
+                        .slice()
+                        .reverse()
+                        .slice(0, 5)
+                        .map(
+                          (
+                            booking,
+                            index
+                          ) => (
+                            <div
+                              key={booking?.id ?? `${booking?.email ?? 'booking'}-${booking?.bookedAt ?? index}`}
+                              className="border-b border-gray-50 px-5 py-4 hover:bg-gray-50"
+                            >
+                              <p className="truncate text-sm font-bold text-gray-800">
+                                {booking.title}
+                              </p>
+
+                              <p className="mt-1 text-xs text-gray-500">
+                                {statusLabel(booking.status)}
                               </p>
                             </div>
-                          </div>
-                        </div>
-                      ))
+                          )
+                        )
                     )}
+
                   </div>
                 </div>
               )}
+
             </div>
 
-            {/* Logout */}
+            {/* LOGOUT */}
+
             <button
+              type="button"
               onClick={handleLogout}
-              className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 text-gray-600 hover:text-red-600 transition-colors rounded-xl hover:bg-red-50 border border-transparent hover:border-red-100"
+              className="flex h-10 items-center gap-2 rounded-xl px-2 text-gray-600 transition hover:bg-red-50 hover:text-red-600 sm:px-3"
+              aria-label={t('aria.logout')}
             >
-              <FaSignOutAlt className="flex-shrink-0" />
-              <span className="hidden md:inline font-medium text-sm">Logout</span>
+              <FaSignOutAlt />
+
+              <span className="hidden text-sm font-semibold md:inline">
+                {t('dashboard.logout')}
+              </span>
             </button>
+
           </div>
+
         </div>
+
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Section Header */}
-        <div className="mb-6 sm:mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <FaBookOpen className="text-primary text-xl" />
-              </div>
-              <div>
-                <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Available Books</h2>
-                <p className="text-xs sm:text-sm text-gray-500">
-                  Browse our collection and reserve your favourite SDA books.
-                </p>
-              </div>
-            </div>
+      {/* ======================================================
+          MAIN
+      ======================================================= */}
 
-            {/* My Bookings Button */}
-            <button
+      <main className="mx-auto max-w-7xl px-6 py-24">
+
+        {/* PAGE HEADER */}
+
+        <SectionHeader
+          badge={t('dashboard.welcomeBadge')}
+          title={t('dashboard.welcomeTitle', { name: userName })}
+          subtitle={t('dashboard.welcomeSubtitle')}
+        />
+
+        {/* ACTIONS ROW */}
+
+        <div className="mt-10 flex flex-col items-center justify-between gap-5 sm:flex-row">
+
+          <div className="inline-flex items-center gap-2 self-start rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <FaBookOpen className="text-primary" />
+            <span className="text-sm text-gray-500">
+              {t('dashboard.booksAvailable', { count: allBooks.length })}
+            </span>
+          </div>
+
+          {/* MY BOOKINGS */}
+
+          {!isGuest && (
+            <CTAButton
+              className=""
               onClick={() => {
                 setShowBookings(true);
-                setBookingTab(waitingBookings.length > 0 ? 'waiting' : 'history');
+                setBookingTab(
+                  waitingBookings.length > 0
+                    ? 'waiting'
+                    : 'history'
+                );
               }}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold transition-all hover:bg-primary/90 hover:scale-[1.02] shadow-lg shadow-primary/25 flex-shrink-0"
             >
               <FaHistory />
-              My Bookings
+              {t('dashboard.myBookings')}
+
               {waitingBookings.length > 0 && (
-                <span className="min-w-[1.25rem] h-5 px-1 rounded-full bg-white/25 text-xs flex items-center justify-center font-bold">
+                <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-white/20 px-1.5 text-[11px]">
                   {waitingBookings.length}
                 </span>
               )}
-            </button>
+            </CTAButton>
+          )}
+
+        </div>
+
+        {/* GUEST NOTICE */}
+
+        {isGuest && (
+          <div className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center text-sm text-amber-800">
+            {t('dashboard.guestBanner')}
           </div>
+        )}
+
+        {/* ====================================================
+            PRODUCT GRID
+        ===================================================== */}
+
+        {allBooks.length === 0 ? (
+          <div className="mt-14 rounded-3xl border border-dashed border-gray-300 bg-gray-50 py-20 text-center">
+
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-gray-400 shadow-sm">
+              <FaBookOpen className="text-2xl" />
+            </div>
+
+            <h3 className="font-bold text-gray-800">
+              {t('dashboard.noBooks')}
+            </h3>
+
+            <p className="mt-1 text-sm text-gray-500">
+              {t('dashboard.noBooksHint')}
+            </p>
+
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-6 mt-14">
+
+            {allBooks.map((book) => (
+              <div key={book.id} className="">
+                <BookCard
+                  book={book}
+                  onBookNow={handleBookNow}
+                />
+              </div>
+            ))}
+
+          </div>
+        )}
+
+        <div className="mt-16 text-center">
+          <CTAButton onClick={() => setShowCart(true)}>
+            {t('dashboard.cart')}
+            <FaArrowRight />
+          </CTAButton>
         </div>
 
-        {/* Books Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 lg:gap-6">
-          {allBooks.map((book) => (
-            <BookCard key={book.id} book={book} onBookNow={handleBookNow} />
-          ))}
-        </div>
-
-        {/* Footer note */}
-        <div className="mt-12 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-2xl p-6 text-center border border-primary/10">
-          <p className="text-gray-700 font-medium">Thank you for booking with SDA Booking!</p>
-          <p className="text-gray-500 text-sm mt-1">
-            Your reservation will be processed and confirmed at your selected church.
-          </p>
-        </div>
       </main>
 
-      {/* Cart Modal */}
-      {showCart && (
-        <div className="fixed inset-0 z-40 flex items-start sm:items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
-          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden animate-slideUp my-3 sm:my-8 max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-4rem)] flex flex-col">
-            <button
-              onClick={() => setShowCart(false)}
-              className="absolute top-3 right-3 sm:top-4 sm:right-4 text-gray-400 hover:text-gray-600 transition-colors z-10 w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+      {/* ======================================================
+          CART
+      ======================================================= */}
 
-            <div className="p-5 sm:p-8 flex flex-col min-h-0 flex-1">
-              <div className="text-center mb-5 sm:mb-6">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto bg-primary rounded-xl flex items-center justify-center text-white text-xl sm:text-2xl shadow-lg shadow-primary/30">
+      {showCart && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm">
+
+          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+
+            <div className="flex items-center justify-between border-b border-gray-100 p-5">
+
+              <div className="flex items-center gap-3">
+
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-white">
                   <FaShoppingCart />
                 </div>
-                <h2 className="mt-3 sm:mt-4 text-xl sm:text-2xl font-bold text-gray-800">Your Cart</h2>
-                <p className="text-gray-500 text-xs sm:text-sm">
-                  {cartCount > 0 ? `${cartCount} book${cartCount > 1 ? 's' : ''} ready to pay` : 'Your cart is empty'}
-                </p>
+
+                <div>
+                  <h2 className="font-extrabold text-gray-900">
+                    {t('dashboard.yourCart')}
+                  </h2>
+
+                  <p className="text-xs text-gray-500">
+                    {t('dashboard.cartCount', { count: cartCount })}
+                  </p>
+                </div>
+
               </div>
 
+              <button
+                type="button"
+                onClick={() =>
+                  setShowCart(false)
+                }
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500 hover:bg-gray-200"
+                aria-label={t('aria.close')}
+              >
+                ×
+              </button>
+
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+
               {cart.length === 0 ? (
-                <div className="text-center py-10">
-                  <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-4">
-                    <FaShoppingCart className="text-2xl" />
-                  </div>
-                  <p className="text-gray-500 font-medium">No books in your cart</p>
-                  <p className="text-sm text-gray-400 mt-1">Click "Book Now" on any book to add it here.</p>
+                <div className="py-12 text-center">
+
+                  <FaShoppingCart className="mx-auto mb-4 text-4xl text-gray-300" />
+
+                  <p className="font-semibold text-gray-600">
+                    {t('dashboard.noBooksInCart')}
+                  </p>
+
+                  <p className="mt-1 text-sm text-gray-400">
+                    {t('dashboard.addToCartHint')}
+                  </p>
+
                 </div>
               ) : (
-                <>
-                  <div className="space-y-3 overflow-y-auto pr-1 min-h-0">
-                    {cart.map((item) => (
-                      <div key={item.book.id} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <FaBookOpen className="text-primary text-base sm:text-lg" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-800 truncate">{item.book.title}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">{formatPrice(item.book.price)} each</p>
-                          </div>
-                          <button
-                            onClick={() => removeFromCart(item.book.id)}
-                            className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0"
-                            aria-label="Remove from cart"
-                          >
-                            <FaTrash />
-                          </button>
-                        </div>
+                <div className="space-y-3">
 
-                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-                          {/* Quantity */}
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => updateQty(item.book.id, -1)}
-                              className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg border border-gray-200 bg-white text-gray-500 hover:text-primary hover:border-primary flex items-center justify-center transition-colors"
-                              aria-label="Decrease quantity"
-                            >
-                              <FaMinus className="text-[10px]" />
-                            </button>
-                            <span className="w-6 text-center text-sm font-semibold text-gray-800">{item.qty}</span>
-                            <button
-                              onClick={() => updateQty(item.book.id, 1)}
-                              className="w-8 h-8 sm:w-7 sm:h-7 rounded-lg border border-gray-200 bg-white text-gray-500 hover:text-primary hover:border-primary flex items-center justify-center transition-colors"
-                              aria-label="Increase quantity"
-                            >
-                              <FaPlus className="text-[10px]" />
-                            </button>
-                          </div>
-
-                          <div className="text-sm font-bold text-gray-800">
-                            {formatPrice(item.book.price * item.qty)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 mt-5 pt-5 border-t border-gray-100">
-                    <div className="text-center sm:text-left">
-                      <p className="text-xs sm:text-sm text-gray-500">Total</p>
-                      <p className="text-xl sm:text-2xl font-bold text-primary">{formatPrice(cartTotal)}</p>
-                    </div>
-                    <button
-                      onClick={() => setShowCheckout(true)}
-                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-blue-600 text-white font-semibold text-sm transition-all hover:bg-blue-700 hover:scale-[1.02] shadow-lg shadow-blue-600/25"
+                  {cart.map((item) => (
+                    <div
+                      key={item.book.id}
+                      className="rounded-2xl border border-gray-100 bg-gray-50 p-4"
                     >
-                      <FaLock />
-                      Pay Now
-                    </button>
-                  </div>
-                </>
+
+                      <div className="flex gap-3">
+
+                        <div className="h-16 w-14 shrink-0 overflow-hidden rounded-xl bg-gray-200">
+
+                          {item.book.image ? (
+                            <img
+                              src={item.book.image}
+                              alt={item.book.title}
+                              loading="lazy"
+                              decoding="async"
+                              className="h-full w-full object-cover"
+                              onError={(event) => {
+                                event.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div
+                              className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${
+                                item.book.gradient ||
+                                'from-teal-600 to-emerald-800'
+                              } text-white`}
+                            >
+                              <FaBookOpen />
+                            </div>
+                          )}
+
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+
+                          <p className="line-clamp-2 text-sm font-bold text-gray-800">
+                            {item.book.title}
+                          </p>
+
+                          <p className="mt-1 text-xs text-gray-500">
+                            {formatPrice(item.book.price)}
+                          </p>
+
+                          <div className="mt-3 flex items-center justify-between">
+
+                            <div className="flex items-center gap-2">
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateQty(
+                                    item.book.id,
+                                    -1
+                                  )
+                                }
+                                className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-gray-500 shadow-sm"
+                                aria-label={t('aria.decreaseQty')}
+                              >
+                                <FaMinus className="text-[9px]" />
+                              </button>
+
+                              <span className="w-6 text-center text-sm font-bold">
+                                {item.qty}
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  updateQty(
+                                    item.book.id,
+                                    1
+                                  )
+                                }
+                                className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-gray-500 shadow-sm"
+                                aria-label={t('aria.increaseQty')}
+                              >
+                                <FaPlus className="text-[9px]" />
+                              </button>
+
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                removeFromCart(
+                                  item.book.id
+                                )
+                              }
+                              className="text-xs font-semibold text-red-500"
+                              aria-label={t('aria.removeFromCart')}
+                            >
+                              {t('dashboard.remove')}
+                            </button>
+
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                    </div>
+                  ))}
+
+                </div>
               )}
+
             </div>
+
+            {cart.length > 0 && (
+              <div className="border-t border-gray-100 p-5">
+
+                <div className="mb-4 flex items-center justify-between">
+
+                  <span className="text-sm font-medium text-gray-500">
+                    {t('dashboard.total')}
+                  </span>
+
+                  <span className="text-2xl font-black text-gray-900">
+                    {formatPrice(cartTotal)}
+                  </span>
+
+                </div>
+
+                <CTAButton
+                  className="w-full justify-center"
+                  onClick={() =>
+                    setShowCheckout(true)
+                  }
+                >
+                  <FaLock />
+                  {t('dashboard.continueToCheckout')}
+                </CTAButton>
+
+              </div>
+            )}
+
           </div>
+
         </div>
       )}
 
-      {/* Checkout Modal */}
+      {/* ======================================================
+          CHECKOUT
+      ======================================================= */}
+
       {showCheckout && (
         <CheckoutForm
           cart={cart}
-          onClose={() => setShowCheckout(false)}
-          onComplete={handleCheckoutComplete}
+          onClose={() =>
+            setShowCheckout(false)
+          }
+          onComplete={
+            handleCheckoutComplete
+          }
         />
       )}
 
-      {/* My Bookings Modal */}
+      {/* ======================================================
+          SEARCH
+      ======================================================= */}
+
+      {showSearch && (
+        <SearchOverlay
+          onClose={() =>
+            setShowSearch(false)
+          }
+          onSelectBook={
+            handleSearchSelect
+          }
+        />
+      )}
+
+      {/* ======================================================
+          BOOKINGS
+      ======================================================= */}
+
       {showBookings && (
-        <div className="fixed inset-0 z-40 flex items-start sm:items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
-          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden animate-slideUp my-3 sm:my-8 max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-4rem)] flex flex-col">
-            <button
-              onClick={() => setShowBookings(false)}
-              className="absolute top-3 right-3 sm:top-4 sm:right-4 text-gray-400 hover:text-gray-600 transition-colors z-10 w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm">
 
-            <div className="p-5 sm:p-8 flex flex-col min-h-0 flex-1">
-              <div className="text-center mb-5 sm:mb-6">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto bg-primary rounded-xl flex items-center justify-center text-white text-xl sm:text-2xl shadow-lg shadow-primary/30">
-                  <FaHistory />
+          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+
+            <div className="border-b border-gray-100 p-5">
+
+              <div className="flex items-center justify-between">
+
+                <div>
+                  <h2 className="text-xl font-extrabold text-gray-900">
+                    {t('dashboard.myBookings')}
+                  </h2>
+
+                  <p className="mt-1 text-sm text-gray-500">
+                    {t('dashboard.trackOrders')}
+                  </p>
                 </div>
-                <h2 className="mt-3 sm:mt-4 text-xl sm:text-2xl font-bold text-gray-800">My Bookings</h2>
-                <p className="text-gray-500 text-xs sm:text-sm">View your booking history and waiting requests</p>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowBookings(false)
+                  }
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500"
+                  aria-label={t('aria.close')}
+                >
+                  ×
+                </button>
+
               </div>
 
-              {/* Tabs */}
-              <div className="flex bg-gray-100 rounded-xl p-1 mb-5 sm:mb-6">
+              <div className="mt-5 grid grid-cols-2 rounded-xl bg-gray-100 p-1">
+
                 <button
-                  onClick={() => setBookingTab('waiting')}
-                  className={`flex-1 py-2.5 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${
-                    bookingTab === 'waiting' ? 'bg-white shadow-md text-primary' : 'text-gray-500 hover:text-gray-700'
+                  type="button"
+                  onClick={() =>
+                    setBookingTab(
+                      'waiting'
+                    )
+                  }
+                  className={`rounded-lg py-2.5 text-sm font-bold ${
+                    bookingTab ===
+                    'waiting'
+                      ? 'bg-white text-primary shadow-sm'
+                      : 'text-gray-500'
                   }`}
                 >
-                  <FaClock />
-                  Waiting ({waitingBookings.length})
+                  <FaClock className="mr-2 inline" />
+                  {t('dashboard.waiting', { count: waitingBookings.length })}
                 </button>
+
                 <button
-                  onClick={() => setBookingTab('history')}
-                  className={`flex-1 py-2.5 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${
-                    bookingTab === 'history' ? 'bg-white shadow-md text-primary' : 'text-gray-500 hover:text-gray-700'
+                  type="button"
+                  onClick={() =>
+                    setBookingTab(
+                      'history'
+                    )
+                  }
+                  className={`rounded-lg py-2.5 text-sm font-bold ${
+                    bookingTab ===
+                    'history'
+                      ? 'bg-white text-primary shadow-sm'
+                      : 'text-gray-500'
                   }`}
                 >
-                  <FaHistory />
-                  History ({historyBookings.length})
+                  <FaHistory className="mr-2 inline" />
+                  {t('dashboard.history', { count: historyBookings.length })}
                 </button>
+
               </div>
 
-              {/* List */}
-              <div className="space-y-3 overflow-y-auto pr-1 min-h-0">
-                {(bookingTab === 'waiting' ? waitingBookings : historyBookings).length === 0 ? (
-                  <div className="text-center py-10">
-                    <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-4">
-                      {bookingTab === 'waiting'
-                        ? <FaClock className="text-2xl" />
-                        : <FaHistory className="text-2xl" />}
-                    </div>
-                    <p className="text-gray-500 font-medium">
-                      {bookingTab === 'waiting' ? 'No waiting bookings' : 'No booking history yet'}
-                    </p>
-                    <p className="text-sm text-gray-400 mt-1">
-                      {bookingTab === 'waiting'
-                        ? 'Books you reserve will appear here while being processed.'
-                        : 'Every book you book will be recorded here.'}
-                    </p>
-                  </div>
-                ) : (
-                  (bookingTab === 'waiting' ? waitingBookings : historyBookings)
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+
+              {(
+                bookingTab ===
+                'waiting'
+                  ? waitingBookings
+                  : historyBookings
+              ).length === 0 ? (
+                <div className="py-12 text-center">
+
+                  <FaHistory className="mx-auto mb-4 text-4xl text-gray-300" />
+
+                  <p className="font-semibold text-gray-600">
+                    {bookingTab === 'waiting'
+                      ? t('dashboard.noWaiting')
+                      : t('dashboard.noHistory')}
+                  </p>
+
+                  <p className="mt-1 text-sm text-gray-400">
+                    {bookingTab === 'waiting'
+                      ? t('dashboard.noWaitingHint')
+                      : t('dashboard.noHistoryHint')}
+                  </p>
+
+                </div>
+              ) : (
+                <div className="space-y-3">
+
+                  {(
+                    bookingTab ===
+                    'waiting'
+                      ? waitingBookings
+                      : historyBookings
+                  )
                     .slice()
                     .reverse()
-                    .map((b, i) => (
-                      <div key={i} className="flex items-center gap-3 sm:gap-4 bg-gray-50 rounded-xl p-4 border border-gray-100">
-                        <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <FaBookOpen className="text-primary text-base sm:text-lg" />
+                    .map(
+                      (
+                        booking,
+                        index
+                      ) => (
+                        <div
+                          key={
+                            booking.id ||
+                            index
+                          }
+                          className="rounded-2xl border border-gray-100 bg-gray-50 p-4"
+                        >
+
+                          <div className="flex items-start gap-3">
+
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                              <FaBookOpen />
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+
+                              <p className="font-bold text-gray-800">
+                                {booking.title ||
+                                  'Book'}
+                              </p>
+
+                              <p className="mt-1 text-xs text-gray-500">
+                                {booking.district ||
+                                  ''}
+                                {booking.sector
+                                  ? ` · ${booking.sector}`
+                                  : ''}
+                              </p>
+
+                              <p className="mt-1 text-xs text-gray-400">
+                                {formatDate(
+                                  booking.bookedAt
+                                )}
+                              </p>
+
+                            </div>
+
+                            <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-bold text-primary">
+                              {statusLabel(booking.status)}
+                            </span>
+
+                          </div>
+
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-800 truncate">{b.title}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {b.district} · {b.sector}
-                            {b.qty > 1 ? ` · ×${b.qty}` : ''}
-                          </p>
-                          <p className="text-[11px] text-gray-400 mt-0.5">{formatDate(b.bookedAt)}</p>
-                        </div>
-                        <span className={`px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold flex-shrink-0 ${
-                          b.status === 'New'
-                            ? 'bg-amber-100 text-amber-700'
-                            : b.status === 'Complete'
-                              ? 'bg-green-100 text-green-700'
-                              : b.status === 'Delivered'
-                                ? 'bg-blue-100 text-blue-700'
-                                : b.status === 'Cancelled'
-                                  ? 'bg-red-100 text-red-600'
-                                  : 'bg-yellow-100 text-yellow-700'
-                        }`}>
-                          {b.status}
-                        </span>
-                      </div>
-                    ))
-                )}
-              </div>
+                      )
+                    )}
+
+                </div>
+              )}
+
             </div>
+
           </div>
+
         </div>
       )}
 
-      {/* Success Toast */}
+      {/* ======================================================
+          TOAST
+      ======================================================= */}
+
       {toast && (
-        <div className="fixed bottom-3 right-3 left-3 sm:bottom-5 sm:right-5 sm:left-auto z-50 animate-toast">
-          <div className="w-full sm:max-w-md ml-auto bg-white rounded-2xl shadow-2xl border border-green-100 overflow-hidden">
-            <div className="flex items-start gap-3 sm:gap-4 p-4 sm:p-5">
-              <div className="w-11 h-11 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                <FaCheckCircle className="text-green-600 text-xl" />
+        <div className="fixed bottom-5 left-3 right-3 z-[70] sm:left-auto sm:right-6 sm:max-w-md">
+
+          <div className="rounded-2xl border border-green-100 bg-white p-4 shadow-2xl">
+
+            <div className="flex items-start gap-3">
+
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-600">
+                <FaCheckCircle />
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-gray-900">{toast.title}</h3>
-                <p className="text-sm text-gray-600 mt-1 leading-6">
-                  <span className="font-semibold text-gray-800">{toast.message}</span>
+
+              <div className="min-w-0 flex-1">
+
+                <p className="font-bold text-gray-900">
+                  {toast.title}
                 </p>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  {toast.message}
+                </p>
+
               </div>
+
               <button
-                onClick={() => setToast(null)}
-                className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
-                aria-label="Dismiss notification"
+                type="button"
+                onClick={() =>
+                  setToast(null)
+                }
+                className="text-xl text-gray-400"
+                aria-label={t('aria.close')}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                ×
               </button>
+
             </div>
-            <div className="h-1 bg-gradient-to-r from-green-500 to-emerald-400"></div>
+
           </div>
+
         </div>
       )}
-    </div>
-  );
-};
 
-const formatDate = (iso) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-};
-
-const BookCard = ({ book, onBookNow }) => {
-  const [imgError, setImgError] = useState(false);
-
-  return (
-    <div className="group bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col">
-      {/* Book Image */}
-      <div className="relative h-56 sm:h-60 overflow-hidden bg-gray-100">
-        {imgError ? (
-          <div className={`w-full h-full bg-gradient-to-br ${book.gradient} flex flex-col items-center justify-center text-white p-4`}>
-            <FaBookOpen className="text-5xl mb-3 opacity-90" />
-            <span className="text-center font-bold leading-snug">{book.title}</span>
-          </div>
-        ) : (
-          <img
-            src={book.image}
-            alt={book.title}
-            loading="lazy"
-            onError={() => setImgError(true)}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          />
-        )}
-
-        {/* Category badge */}
-        <span className="absolute top-3 left-3 bg-white/85 backdrop-blur-sm text-gray-700 text-[10px] font-semibold uppercase tracking-wider px-3 py-1 rounded-full shadow-sm">
-          {book.category}
-        </span>
-
-        {/* Short description overlaid on the image */}
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent pt-16 pb-4 px-4">
-          <p className="text-white text-xs leading-5 clamp-2">{book.description}</p>
-        </div>
-      </div>
-
-      {/* Book Info */}
-      <div className="p-5 flex flex-col flex-1">
-        <h3 className="text-lg font-bold text-gray-900 leading-snug">{book.title}</h3>
-        <p className="text-sm text-gray-500 mt-1">{book.author}</p>
-
-        <div className="flex items-center gap-4 mt-3 mb-5 text-xs text-gray-500">
-          <span className="flex items-center gap-1.5">
-            <FaUser className="text-primary/60" />
-            {book.author}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <FaMapMarkerAlt className="text-primary/60" />
-            {book.copies} copies
-          </span>
-        </div>
-
-        <div className="mt-auto">
-          <div className="text-lg font-bold text-gray-900 mb-3">{formatPrice(book.price)}</div>
-          <button
-            onClick={() => onBookNow(book)}
-            className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold text-sm transition-all hover:bg-blue-700 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2"
-          >
-            <FaShoppingCart className="text-sm" />
-            Book Now
-          </button>
-        </div>
-      </div>
     </div>
   );
 };

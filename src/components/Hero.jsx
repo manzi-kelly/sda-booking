@@ -1,8 +1,14 @@
-import React, { useState } from 'react'
-import { FaCheckCircle, FaArrowRight } from 'react-icons/fa'
-import AuthPage from '../pages/AuthPage'
-import heroImg from '../assets/hlybible.jpg'
+import React, { useState, lazy, Suspense } from 'react'
+import { FaArrowRight } from 'react-icons/fa'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
+
+const AuthPage = lazy(() => import('../pages/AuthPage'))
+
+const AuthModal = ({ onClose }) => (
+  <Suspense fallback={null}>
+    <AuthPage onClose={onClose} />
+  </Suspense>
+)
 
 const Hero = () => {
   const { t } = useLanguage()
@@ -10,52 +16,84 @@ const Hero = () => {
 
   return (
     <>
-      <section id="home" className="relative min-h-screen flex items-center overflow-hidden">
-        {/* Background */}
-        <div className="absolute inset-0">
-          <img
-            src={heroImg}
-            alt={t('hero.imageAlt')}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-gray-900/95 via-gray-900/85 to-gray-900/60"></div>
-        </div>
+      <section
+        id="home"
+        className="relative min-h-screen overflow-hidden flex items-center"
+      >
+        {/* Background Image */}
+        <img
+          src="/sda.png"
+          alt={t('hero.imageAlt')}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
 
-        <div className="relative z-10 max-w-7xl mx-auto px-6 py-32 md:py-28 text-center lg:text-left lg:flex lg:items-center lg:justify-between w-full gap-16">
-          <div className="max-w-2xl mx-auto lg:mx-0">
-            <span className="inline-block text-primary uppercase tracking-[5px] font-semibold bg-white/10 border border-white/20 rounded-full px-5 py-2">
-              {t('hero.badge')}
-            </span>
-            <h1 className="mt-6 text-4xl md:text-6xl font-bold text-white leading-tight">
+        {/* Dark Overlay */}
+        <div className="absolute inset-0 bg-[#071b2d]/70" />
+
+        {/* Optional Gradient for Better Text Readability */}
+        <div className="absolute inset-0 bg-gradient-to-r from-[#071b2d]/90 via-[#071b2d]/60 to-transparent" />
+
+        {/* Hero Content */}
+        <div className="relative z-10 w-full max-w-7xl mx-auto px-6 lg:px-10">
+          <div className="max-w-2xl">
+
+            {/* Small Label */}
+            <div className="flex items-center gap-3 mb-5">
+              <span className="h-px w-10 bg-[#f4b942]" />
+
+              <p className="text-[#f4b942] text-sm font-semibold uppercase tracking-[2px]">
+                {t('hero.badge')}
+              </p>
+            </div>
+
+            {/* Main Heading */}
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.05] text-white">
               {t('hero.titleA')}
-              <span className="text-primary"> {t('hero.titleHighlight')} </span>
-              {t('hero.titleB')}
+              <span className="block text-[#f4b942] mt-2">
+                {t('hero.titleHighlight')}
+              </span>
+              <span className="block mt-2">
+                {t('hero.titleB')}
+              </span>
             </h1>
-            <p className="mt-6 text-lg text-white/80 leading-8 max-w-lg mx-auto lg:mx-0">
+
+            {/* Description */}
+            <p className="mt-6 max-w-lg text-base md:text-lg leading-relaxed text-white/80">
               {t('hero.description')}
             </p>
-            <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-              <span className="flex items-center gap-3 text-white/90">
-                <FaCheckCircle className="text-primary" />
-                {t('hero.fastConfirmation')}
-              </span>
-              <span className="flex items-center gap-3 text-white/90">
-                <FaCheckCircle className="text-primary" />
-                {t('hero.pickupAtChurch')}
-              </span>
-            </div>
+
+            {/* Button */}
             <button
+              type="button"
               onClick={() => setShowAuth(true)}
-              className="mt-10 inline-flex items-center gap-3 bg-blue-600 text-white px-10 py-4 rounded-full font-semibold hover:bg-blue-700 hover:scale-105 hover:shadow-lg hover:shadow-blue-600/30 transition-all duration-300"
+              className="mt-8 inline-flex items-center gap-3 rounded-full bg-[#f4b942] px-7 py-4 font-semibold text-[#071b2d] shadow-lg shadow-black/20 transition-all duration-300 hover:bg-white hover:scale-105 active:scale-95"
             >
-              {t('hero.bookNow')} <FaArrowRight />
+              {t('hero.explore')}
+              <FaArrowRight size={13} />
             </button>
+
           </div>
         </div>
+
+        {/* Bottom Navigation Words */}
+        <div className="absolute bottom-7 left-0 right-0 z-10">
+          <div className="max-w-7xl mx-auto px-6 lg:px-10">
+            <div className="flex justify-between text-[10px] sm:text-xs uppercase tracking-[2px] text-white/50">
+              <span>{t('hero.faith')}</span>
+              <span>{t('hero.hope')}</span>
+              <span>{t('hero.growth')}</span>
+              <span>{t('hero.service')}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Fade */}
+        <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-[#071b2d]/60 to-transparent pointer-events-none" />
       </section>
 
+      {/* Authentication Modal */}
       {showAuth && (
-        <AuthPage onClose={() => setShowAuth(false)} />
+        <AuthModal onClose={() => setShowAuth(false)} />
       )}
     </>
   )

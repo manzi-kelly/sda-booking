@@ -1,128 +1,103 @@
-import React, { useEffect, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { FaArrowRight, FaCheckCircle } from "react-icons/fa";
+import React, { useState, useEffect, lazy, Suspense } from "react";
+import { useNavigate } from "react-router-dom";
+import { FaArrowRight } from "react-icons/fa";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
-import { goToSection } from "../utils/navigation";
+import { books as fallbackBooks } from "../data/books";
+import SectionHeader from "./ui/SectionHeader";
+import CTAButton from "./ui/CTAButton";
+import BookCard from "./ui/BookCard";
+import useReveal from "../hooks/useReveal";
+import { openBooking } from "../utils/navigation";
+
+const AuthPage = lazy(() => import("../pages/AuthPage"));
+
+const AuthModal = ({ onClose }) => (
+  <Suspense fallback={null}>
+    <AuthPage onClose={onClose} />
+  </Suspense>
+)
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const About = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
-  const location = useLocation();
-  const sectionRef = useRef(null);
+  const sectionRef = useReveal();
+  const [showAuth, setShowAuth] = useState(false);
+  const [books, setBooks] = useState([]);
+  const [fromDb, setFromDb] = useState(false);
+
+  const mapBooks = (items) =>
+    (Array.isArray(items) ? items : []).map((b) => ({
+      id: b.id,
+      title: b.title || '',
+      author: b.author || '',
+      category: b.category || 'Book',
+      description: b.description || '',
+      image: b.image,
+      gradient: b.gradient || 'from-teal-500 to-emerald-700',
+      copies: Number(b.copies) || 1,
+      price: Number(b.price) || 0
+    }));
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target
-              .querySelectorAll(".slide-up")
-              .forEach((el) => el.classList.add("visible"));
-          }
-        });
-      },
-      { threshold: 0.2 }
-    );
-
-    if (sectionRef.current) observer.observe(sectionRef.current);
-
-    return () => observer.disconnect();
+    fetch(`${API_URL}/api/books`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((items) => {
+        if (Array.isArray(items) && items.length) {
+          setBooks(mapBooks(items));
+          setFromDb(true);
+        }
+      })
+      .catch(() => {});
   }, []);
 
-  const benefits = [
-    t("about.benefit1"),
-    t("about.benefit2"),
-    t("about.benefit3"),
-    t("about.benefit4"),
-  ];
+  const displayBooks = (fromDb ? books : fallbackBooks).slice(0, 6);
+
+  // Booking CTA: signed-in users go straight to the dashboard,
+  // everyone else is asked to log in / register first.
+  const handleBooking = () => {
+    openBooking(navigate, () => setShowAuth(true));
+  };
 
   return (
-    <section
-      id="about"
-      ref={sectionRef}
-      className="py-24 bg-white"
-    >
-      <div className="max-w-6xl mx-auto px-6">
+    <>
+      <section
+        id="about"
+        ref={sectionRef}
+        className="py-24 bg-white"
+      >
+        <div className="max-w-7xl mx-auto px-6">
 
-        <div className="max-w-4xl">
+          {/* Header */}
+          <SectionHeader
+            badge={t("about.booksBadge")}
+            title={t("dashboard.availableBooks")}
+            subtitle={t("dashboard.browseBooks")}
+          />
 
-          <div className="slide-up">
-
-            <span className="text-primary uppercase tracking-[4px] font-semibold">
-              {t("about.badge")}
-            </span>
-
-            <h2 className="mt-4 text-4xl md:text-5xl font-bold text-gray-900 leading-tight text-left">
-              {t("about.title")}
-            </h2>
-
+          {/* Books Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 lg:gap-6 mt-14">
+            {displayBooks.map((book) => (
+              <div key={book.id} className="slide-up">
+                <BookCard book={book} onBookNow={handleBooking} />
+              </div>
+            ))}
           </div>
 
-          <div className="slide-up mt-8 p-8 bg-gray-50 rounded-2xl border-l-4 border-primary">
-
-            <p className="text-gray-700 text-lg leading-8 text-left">
-              {t("about.p1")}
-            </p>
-
-          </div>
-
-          <div className="slide-up mt-8 space-y-5">
-
-            <p className="text-lg text-gray-600 leading-8 text-left">
-              {t("about.p2")}
-            </p>
-
-            <p className="text-lg text-gray-600 leading-8 text-left">
-              {t("about.p3")}
-            </p>
-
-          </div>
-
-          <div className="slide-up mt-10">
-
-            <h3 className="text-2xl font-bold text-gray-900 mb-6 text-left">
-              {t("about.keyBenefits")}
-            </h3>
-
-            <div className="space-y-4">
-
-              {benefits.map((benefit, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-4"
-                >
-                  <FaCheckCircle className="text-primary text-lg flex-shrink-0" />
-
-                  <span className="text-gray-700 text-lg">
-                    {benefit}
-                  </span>
-                </div>
-              ))}
-
-            </div>
-
-          </div>
-
-          <div className="slide-up mt-10">
-
-            <a
-              href="#services"
-              onClick={(e) => {
-                e.preventDefault()
-                goToSection(navigate, location, "services")
-              }}
-              className="inline-flex items-center gap-3 text-primary font-semibold hover:gap-4 transition-all"
-            >
-              {t("about.explore")}
+          {/* View More */}
+          <div className="slide-up mt-12 text-center">
+            <CTAButton onClick={handleBooking}>
+              {t("about.viewMore")}
               <FaArrowRight />
-            </a>
-
+            </CTAButton>
           </div>
 
         </div>
+      </section>
 
-      </div>
-    </section>
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+    </>
   );
 };
 

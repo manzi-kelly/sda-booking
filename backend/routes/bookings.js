@@ -1,16 +1,33 @@
 import { Router } from 'express'
 import admin from 'firebase-admin'
 import { verifyToken } from '../middleware/auth.js'
-import { db } from '../config/firebase.js'
+import { db, auth } from '../config/firebase.js'
+import { sendBookingConfirmation } from '../lib/mailer.js'
 
 const router = Router()
 const bookingsCol = db.collection('bookings')
 
-// POST /api/bookings - create a booking for the authenticated user
-router.post('/', verifyToken, async (req, res) => {
+// Resolve the Firestore uid from the (optional) Firebase token.
+// Booking creation is public so guests can order without an account.
+const resolveUid = async (req) => {
+  const header = req.headers.authorization || ''
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null
+  if (!token) return 'guest'
   try {
+    const decoded = await auth.verifyIdToken(token)
+    return decoded.uid || 'guest'
+  } catch {
+    return 'guest'
+  }
+}
+
+// POST /api/bookings - create a booking (logged-in users or guests)
+router.post('/', async (req, res) => {
+  try {
+    const uid = await resolveUid(req)
+
     const booking = {
-      uid: req.user.uid,
+      uid,
       title: req.body.title || '',
       qty: req.body.qty || 1,
       price: req.body.price || 0,
@@ -27,7 +44,16 @@ router.post('/', verifyToken, async (req, res) => {
 
     const docRef = await bookingsCol.add(booking)
 
-    res.status(201).json({ id: docRef.id, ...booking })
+    const created = { id: docRef.id, ...booking }
+
+    // Thank-you email (fire-and-forget; never fails the request).
+    try {
+      await sendBookingConfirmation(created)
+    } catch (err) {
+      console.warn('[bookings] Confirmation email failed:', err.message)
+    }
+
+    res.status(201).json(created)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

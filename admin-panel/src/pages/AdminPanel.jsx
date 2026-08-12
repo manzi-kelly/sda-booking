@@ -24,7 +24,7 @@ import {
   FaPlus,
   FaSpinner
 } from 'react-icons/fa'
-import { adminFetch } from '../config/api'
+import { adminFetch, clearAdminSession } from '../config/api'
 
 const formatPrice = (n) => 'RWF ' + Number(n || 0).toLocaleString()
 
@@ -92,6 +92,11 @@ const AdminPanel = () => {
       const items = await adminFetch('/api/admin/bookings')
       setOrders(items)
     } catch (err) {
+      if (err.status === 401) {
+        clearAdminSession()
+        navigate('/admin', { replace: true })
+        return
+      }
       setLoadError(err.message || 'Failed to load orders. Is the backend running?')
     } finally {
       setLoading(false)
@@ -122,6 +127,11 @@ const AdminPanel = () => {
       })
       setToast({ type: 'success', text: `Order marked as ${status}` })
     } catch (err) {
+      if (err.status === 401) {
+        clearAdminSession()
+        navigate('/admin', { replace: true })
+        return
+      }
       setOrders(previous)
       setToast({ type: 'danger', text: err.message || 'Failed to update status' })
     }
@@ -135,6 +145,11 @@ const AdminPanel = () => {
       setOrders((prev) => prev.filter((o) => o.id !== id))
       setToast({ type: 'danger', text: 'Order deleted.' })
     } catch (err) {
+      if (err.status === 401) {
+        clearAdminSession()
+        navigate('/admin', { replace: true })
+        return
+      }
       setToast({ type: 'danger', text: err.message || 'Failed to delete order' })
     }
   }

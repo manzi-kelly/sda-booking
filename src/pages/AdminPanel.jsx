@@ -18,20 +18,33 @@ import {
   FaBookOpen,
   FaShieldAlt
 } from 'react-icons/fa'
+import { ADMIN_CREDENTIALS } from '../config/admin'
+import { useLanguage } from '../i18n/LanguageContext.jsx'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
 const formatPrice = (n) => 'RWF ' + Number(n || 0).toLocaleString()
 
 const formatDate = (iso) => {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return ''
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  const ms = toTimestamp(iso)
+  if (!ms) return ''
+  return new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-const PAYMENT_LABELS = {
-  airtel: 'Airtel Money',
-  momo: 'MTN MoMo',
-  card: 'Bank Card'
+const toTimestamp = (value) => {
+  if (!value) return 0
+  if (typeof value === 'object') {
+    const seconds = value._seconds != null ? value._seconds : value.seconds
+    return (Number(seconds) || 0) * 1000
+  }
+  const ms = new Date(value).getTime()
+  return Number.isNaN(ms) ? 0 : ms
+}
+
+const PAYMENT_LABEL_KEYS = {
+  airtel: 'checkout.airtelMoney',
+  momo: 'checkout.mtnMomo',
+  card: 'checkout.bankCard'
 }
 
 const STATUS_OPTIONS = ['New', 'Processing', 'Delivered', 'Complete', 'Cancelled']
@@ -53,14 +66,58 @@ const STATUS_ICONS = {
 }
 
 const AdminPanel = () => {
+  const { t } = useLanguage()
   const navigate = useNavigate()
+
+  const statusLabel = (status) => {
+    const key = `dashboard.status${status}`
+    const label = t(key)
+    return label === key ? status : label
+  }
+
+  const paymentLabel = (method) => t(PAYMENT_LABEL_KEYS[method] || 'checkout.bankCard')
   const [orders, setOrders] = useState([])
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [toast, setToast] = useState(null)
+  const [adminToken, setAdminToken] = useState('')
+
+  const mergeOrders = (local, remote) => {
+    const map = new Map()
+    const keyOf = (o) => o.id || `${toTimestamp(o.bookedAt || o.createdAt)}-${o.title}-${o.email}`
+    ;(Array.isArray(local) ? local : []).forEach((o) => map.set(keyOf(o), o))
+    ;(Array.isArray(remote) ? remote : []).forEach((o) => map.set(keyOf(o), o))
+    return Array.from(map.values())
+  }
 
   useEffect(() => {
-    setOrders(JSON.parse(localStorage.getItem('bookings')) || [])
+    try {
+      const local = JSON.parse(localStorage.getItem('bookings')) || []
+      if (Array.isArray(local)) setOrders(local)
+    } catch {
+      setOrders([])
+    }
+
+    fetch(`${API_URL}/api/admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ADMIN_CREDENTIALS)
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data || !data.token) return null
+        setAdminToken(data.token)
+        return fetch(`${API_URL}/api/admin/bookings`, {
+          headers: { Authorization: `Bearer ${data.token}` }
+        })
+      })
+      .then((res) => (res && res.ok ? res.json() : null))
+      .then((items) => {
+        if (Array.isArray(items)) {
+          setOrders((prev) => mergeOrders(prev, items))
+        }
+      })
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -81,15 +138,47 @@ const AdminPanel = () => {
   const changeStatus = (index, status) => {
     const next = orders.map((o, i) => (i === index ? { ...o, status } : o))
     persist(next)
-    setToast({ type: 'success', text: `Order status updated to ${status}` })
+
+    const target = next[index]
+    if (target && target.id && adminToken) {
+      fetch(`${API_URL}/api/admin/bookings/${target.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`
+        },
+        body: JSON.stringify({ status })
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && (status === 'Delivered' || status === 'Complete')) {
+            setToast({ type: 'success', text: t('admin.statusUpdatedNotified', { status: statusLabel(status) }) })
+            return
+          }
+          setToast({ type: 'success', text: t('admin.statusUpdated', { status: statusLabel(status) }) })
+        })
+        .catch(() => {
+          setToast({ type: 'success', text: t('admin.statusUpdated', { status: statusLabel(status) }) })
+        })
+      return
+    }
+
+    setToast({ type: 'success', text: t('admin.statusUpdated', { status: statusLabel(status) }) })
   }
 
   const deleteOrder = (index) => {
     const target = orders[index]
-    if (!window.confirm(`Delete the order for "${target ? target.title : 'this book'}" by ${target ? target.name : 'this customer'}?`)) return
+    if (!window.confirm(t('admin.deleteConfirm', { title: target?.title || '', name: target?.name || '' }))) return
     const next = orders.filter((_, i) => i !== index)
     persist(next)
-    setToast({ type: 'danger', text: 'Order deleted.' })
+    setToast({ type: 'danger', text: t('admin.orderDeleted') })
+
+    if (target && target.id && adminToken) {
+      fetch(`${API_URL}/api/admin/bookings/${target.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` }
+      }).catch(() => {})
+    }
   }
 
   const handleLogout = () => {
@@ -97,7 +186,7 @@ const AdminPanel = () => {
     navigate('/admin', { replace: true })
   }
 
-  const sorted = orders.slice().sort((a, b) => new Date(b.bookedAt || 0) - new Date(a.bookedAt || 0))
+  const sorted = orders.slice().sort((a, b) => toTimestamp(b.bookedAt || b.createdAt) - toTimestamp(a.bookedAt || a.createdAt))
 
   const stats = {
     total: sorted.length,
@@ -110,7 +199,7 @@ const AdminPanel = () => {
 
   const query = search.trim().toLowerCase()
   const filtered = sorted.filter((o) => {
-    const haystack = [o.name, o.email, o.phone, o.title, o.district, o.sector, PAYMENT_LABELS[o.paymentMethod]]
+    const haystack = [o.name, o.email, o.phone, o.title, o.district, o.sector, paymentLabel(o.paymentMethod)]
       .filter(Boolean)
       .join(' ')
       .toLowerCase()
@@ -142,7 +231,7 @@ const AdminPanel = () => {
             </div>
             <div className="min-w-0">
               <h1 className="text-lg sm:text-xl font-bold text-gray-800 truncate">SDA Booking Admin</h1>
-              <p className="text-[11px] sm:text-xs text-gray-500 truncate">Manage orders and customers</p>
+              <p className="text-[11px] sm:text-xs text-gray-500 truncate">{t('admin.subtitle')}</p>
             </div>
           </div>
 
@@ -151,7 +240,7 @@ const AdminPanel = () => {
             className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 text-gray-600 hover:text-red-600 transition-colors rounded-xl hover:bg-red-50 border border-transparent hover:border-red-100"
           >
             <FaSignOutAlt className="flex-shrink-0" />
-            <span className="hidden md:inline font-medium text-sm">Logout</span>
+            <span className="hidden md:inline font-medium text-sm">{t('admin.logout')}</span>
           </button>
         </div>
       </header>
@@ -162,25 +251,25 @@ const AdminPanel = () => {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 mb-6 sm:mb-8">
           <StatCard
             icon={<FaBoxOpen className="text-primary text-lg sm:text-xl" />}
-            label="Total Orders"
+            label={t('admin.totalOrders')}
             value={stats.total}
             color="bg-primary/10 text-primary"
           />
           <StatCard
             icon={<FaMoneyBillWave className="text-emerald-600 text-lg sm:text-xl" />}
-            label="Revenue"
+            label={t('admin.revenue')}
             value={formatPrice(stats.revenue)}
             color="bg-emerald-100 text-emerald-600"
           />
           <StatCard
             icon={<FaClock className="text-yellow-600 text-lg sm:text-xl" />}
-            label="New"
+            label={t('admin.new')}
             value={stats.pending}
             color="bg-yellow-100 text-yellow-600"
           />
           <StatCard
             icon={<FaCheckCircle className="text-blue-600 text-lg sm:text-xl" />}
-            label="Complete"
+            label={t('admin.complete')}
             value={stats.confirmed}
             color="bg-blue-100 text-blue-600"
           />
@@ -190,8 +279,8 @@ const AdminPanel = () => {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-gray-900">Orders</h2>
-              <p className="text-xs sm:text-sm text-gray-500">{filtered.length} of {sorted.length} order{sorted.length === 1 ? '' : 's'}</p>
+              <h2 className="text-base sm:text-lg font-bold text-gray-900">{t('admin.orders')}</h2>
+              <p className="text-xs sm:text-sm text-gray-500">{t('admin.ordersShown', { filtered: filtered.length, total: sorted.length })}</p>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2">
@@ -200,7 +289,7 @@ const AdminPanel = () => {
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search orders..."
+                  placeholder={t('admin.searchOrders')}
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all text-sm text-gray-700 placeholder-gray-400"
                 />
               </div>
@@ -209,9 +298,9 @@ const AdminPanel = () => {
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="px-3 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all text-sm text-gray-700 bg-white cursor-pointer"
               >
-                <option value="All">All statuses</option>
+                <option value="All">{t('admin.allStatuses')}</option>
                 {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                  <option key={s} value={s}>{statusLabel(s)}</option>
                 ))}
               </select>
             </div>
@@ -222,21 +311,21 @@ const AdminPanel = () => {
               <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-4">
                 <FaBoxOpen className="text-2xl" />
               </div>
-              <p className="text-gray-500 font-medium">No orders found</p>
-              <p className="text-sm text-gray-400 mt-1">Orders placed by customers will appear here.</p>
+              <p className="text-gray-500 font-medium">{t('admin.noOrders')}</p>
+              <p className="text-sm text-gray-400 mt-1">{t('admin.noOrdersHint')}</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-gray-50 text-[11px] sm:text-xs uppercase tracking-wider text-gray-500">
-                    <th className="px-4 sm:px-6 py-3 font-semibold">Customer</th>
-                    <th className="px-4 py-3 font-semibold">Book</th>
-                    <th className="px-4 py-3 font-semibold">Location</th>
-                    <th className="px-4 py-3 font-semibold">Payment</th>
-                    <th className="px-4 py-3 font-semibold">Date</th>
-                    <th className="px-4 py-3 font-semibold">Status</th>
-                    <th className="px-4 sm:px-6 py-3 font-semibold text-right">Actions</th>
+                    <th className="px-4 sm:px-6 py-3 font-semibold">{t('admin.customer')}</th>
+                    <th className="px-4 py-3 font-semibold">{t('admin.book')}</th>
+                    <th className="px-4 py-3 font-semibold">{t('admin.location')}</th>
+                    <th className="px-4 py-3 font-semibold">{t('admin.payment')}</th>
+                    <th className="px-4 py-3 font-semibold">{t('admin.date')}</th>
+                    <th className="px-4 py-3 font-semibold">{t('admin.status')}</th>
+                    <th className="px-4 sm:px-6 py-3 font-semibold text-right">{t('admin.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -251,7 +340,7 @@ const AdminPanel = () => {
                               <FaBookOpen className="text-primary text-sm" />
                             </div>
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-800 truncate max-w-[10rem]">{o.name || 'Unknown'}</p>
+                              <p className="text-sm font-semibold text-gray-800 truncate max-w-[10rem]">{o.name || t('admin.unknown')}</p>
                               <p className="text-xs text-gray-400 truncate max-w-[10rem]">
                                 <FaEnvelope className="inline mr-1 -mt-0.5" />
                                 {o.email}
@@ -266,7 +355,7 @@ const AdminPanel = () => {
                         <td className="px-4 py-4">
                           <p className="text-sm font-medium text-gray-800 max-w-[12rem]">{o.title}</p>
                           <p className="text-xs text-gray-500 mt-0.5">
-                            ×{o.qty} · {formatPrice(o.price)} each
+                            ×{o.qty} · {t('admin.each', { price: formatPrice(o.price) })}
                           </p>
                           <p className="text-sm font-bold text-primary mt-1">{formatPrice(total)}</p>
                         </td>
@@ -283,7 +372,7 @@ const AdminPanel = () => {
                             ) : (
                               <FaMobileAlt className={o.paymentMethod === 'airtel' ? 'text-red-500' : 'text-yellow-500'} />
                             )}
-                            {PAYMENT_LABELS[o.paymentMethod] || o.paymentMethod || '—'}
+                            {paymentLabel(o.paymentMethod) || o.paymentMethod || '—'}
                           </span>
                         </td>
                         <td className="px-4 py-4">
@@ -300,7 +389,7 @@ const AdminPanel = () => {
                               className={`px-2 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer outline-none focus:ring-2 focus:ring-primary/20 ${STATUS_STYLES[o.status] || 'bg-gray-100 text-gray-700'} border-transparent`}
                             >
                               {STATUS_OPTIONS.map((s) => (
-                                <option key={s} value={s}>{s}</option>
+                                <option key={s} value={s}>{statusLabel(s)}</option>
                               ))}
                             </select>
                           </div>
@@ -309,7 +398,7 @@ const AdminPanel = () => {
                           <button
                             onClick={() => deleteOrder(realIndex)}
                             className="text-gray-300 hover:text-red-500 transition-colors p-1.5 hover:bg-red-50 rounded-lg"
-                            aria-label="Delete order"
+                            aria-label={t('admin.deleteOrder')}
                           >
                             <FaTrash />
                           </button>

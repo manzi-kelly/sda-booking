@@ -2,8 +2,10 @@ import React, { useState } from 'react'
 import { useNavigate, Navigate, Link } from 'react-router-dom'
 import { FaLock, FaEnvelope, FaEye, FaEyeSlash, FaChevronLeft, FaShieldAlt } from 'react-icons/fa'
 import { ADMIN_CREDENTIALS } from '../config/admin'
+import { useLanguage } from '../i18n/LanguageContext.jsx'
 
 const AdminLogin = () => {
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -20,11 +22,11 @@ const AdminLogin = () => {
     setError('')
 
     if (email.trim().toLowerCase() !== ADMIN_CREDENTIALS.email) {
-      setError('Invalid email or password.')
+      setError(t('admin.invalidCredentials'))
       return
     }
     if (password !== ADMIN_CREDENTIALS.password) {
-      setError('Invalid email or password.')
+      setError(t('admin.invalidCredentials'))
       return
     }
 
@@ -45,7 +47,7 @@ const AdminLogin = () => {
           to="/"
           className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-primary transition-colors mb-6"
         >
-          <FaChevronLeft className="text-xs" /> Back to website
+          <FaChevronLeft className="text-xs" /> {t('admin.backToWebsite')}
         </Link>
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-slideUp">
@@ -53,13 +55,13 @@ const AdminLogin = () => {
             <div className="w-14 h-14 mx-auto rounded-xl bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/30">
               <FaShieldAlt className="text-2xl" />
             </div>
-            <h1 className="mt-4 text-xl font-bold text-gray-900">Admin Login</h1>
-            <p className="text-sm text-gray-500 mt-1">Restricted area - authorised staff only</p>
+            <h1 className="mt-4 text-xl font-bold text-gray-900">{t('admin.loginTitle')}</h1>
+            <p className="text-sm text-gray-500 mt-1">{t('admin.loginSubtitle')}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="p-8 space-y-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('admin.emailAddress')}</label>
               <div className="relative">
                 <FaEnvelope className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
@@ -70,14 +72,14 @@ const AdminLogin = () => {
                     setEmail(e.target.value)
                     setError('')
                   }}
-                  placeholder="admin@example.com"
+                  placeholder={t('admin.emailPlaceholder')}
                   className={inputClass}
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('admin.password')}</label>
               <div className="relative">
                 <FaLock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
@@ -88,14 +90,14 @@ const AdminLogin = () => {
                     setPassword(e.target.value)
                     setError('')
                   }}
-                  placeholder="Enter your password"
+                  placeholder={t('admin.passwordPlaceholder')}
                   className="w-full py-3 pl-12 pr-12 rounded-xl border border-gray-200 outline-none focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all text-gray-700 placeholder-gray-400"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  aria-label="Toggle password visibility"
+                  aria-label={t('admin.togglePassword')}
                 >
                   {showPassword ? <FaEyeSlash /> : <FaEye />}
                 </button>
@@ -109,7 +111,7 @@ const AdminLogin = () => {
               disabled={isLoading}
               className="w-full py-3.5 rounded-xl bg-primary text-white font-semibold transition-all hover:bg-primary/90 hover:scale-[1.01] shadow-lg shadow-primary/30 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {isLoading ? 'Signing in...' : 'Sign In'}
+              {isLoading ? t('admin.signingIn') : t('admin.signIn')}
             </button>
           </form>
         </div>

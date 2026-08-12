@@ -12,12 +12,14 @@ import {
 } from 'react-icons/fa'
 import { districts } from '../data/locations'
 import { auth } from '../firebase'
+import { useLanguage } from '../i18n/LanguageContext.jsx'
 
-const API_URL = 'http://localhost:5000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
 const formatPrice = (n) => 'RWF ' + Number(n || 0).toLocaleString()
 
 const CheckoutForm = ({ cart, onClose, onComplete }) => {
+  const { t } = useLanguage()
   const loggedUser = JSON.parse(localStorage.getItem('user') || '{}')
 
   const [step, setStep] = useState(1)
@@ -30,6 +32,7 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
   })
   const [errors, setErrors] = useState({})
   const [payment, setPayment] = useState({
+    email: loggedUser.email || '',
     method: 'airtel',
     airtelPhone: '',
     momoPhone: '',
@@ -63,48 +66,53 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
 
   const validateDetails = () => {
     const next = {}
-    if (!details.name.trim()) next.name = 'Please enter your full name'
+    if (!details.name.trim()) next.name = t('checkout.errors.nameRequired')
     if (!details.email.trim()) {
-      next.email = 'Please enter your email'
+      next.email = t('checkout.errors.emailRequired')
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(details.email)) {
-      next.email = 'Please enter a valid email address'
+      next.email = t('checkout.errors.emailInvalid')
     }
     if (!details.phone.trim()) {
-      next.phone = 'Please enter your phone number'
+      next.phone = t('checkout.errors.phoneRequired')
     } else if (details.phone.replace(/\D/g, '').length < 9) {
-      next.phone = 'Please enter a valid phone number'
+      next.phone = t('checkout.errors.phoneInvalid')
     }
-    if (!details.district) next.district = 'Please select your district'
-    if (!details.sector) next.sector = 'Please select your sector'
+    if (!details.district) next.district = t('checkout.errors.districtRequired')
+    if (!details.sector) next.sector = t('checkout.errors.sectorRequired')
     return next
   }
 
   const validatePayment = () => {
     const next = {}
+    if (!payment.email.trim()) {
+      next.email = t('checkout.errors.emailRequired')
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payment.email)) {
+      next.email = t('checkout.errors.emailInvalid')
+    }
     if (payment.method === 'airtel') {
       if (!payment.airtelPhone.trim()) {
-        next.airtelPhone = 'Please enter your Airtel Money number'
+        next.airtelPhone = t('checkout.errors.airtelPhoneRequired')
       } else if (payment.airtelPhone.replace(/\D/g, '').length < 9) {
-        next.airtelPhone = 'Please enter a valid phone number'
+        next.airtelPhone = t('checkout.errors.airtelPhoneInvalid')
       }
     } else if (payment.method === 'momo') {
       if (!payment.momoPhone.trim()) {
-        next.momoPhone = 'Please enter your MTN MoMo number'
+        next.momoPhone = t('checkout.errors.momoPhoneRequired')
       } else if (payment.momoPhone.replace(/\D/g, '').length < 9) {
-        next.momoPhone = 'Please enter a valid phone number'
+        next.momoPhone = t('checkout.errors.momoPhoneInvalid')
       }
     } else if (payment.method === 'card') {
-      if (!payment.cardName.trim()) next.cardName = 'Please enter the card holder name'
+      if (!payment.cardName.trim()) next.cardName = t('checkout.errors.cardNameRequired')
       if (!payment.cardNumber.trim()) {
-        next.cardNumber = 'Please enter your card number'
+        next.cardNumber = t('checkout.errors.cardNumberRequired')
       } else if (payment.cardNumber.replace(/\s/g, '').length < 12) {
-        next.cardNumber = 'Please enter a valid card number'
+        next.cardNumber = t('checkout.errors.cardNumberInvalid')
       }
-      if (!payment.cardExpiry.trim()) next.cardExpiry = 'MM/YY'
+      if (!payment.cardExpiry.trim()) next.cardExpiry = t('checkout.errors.cardExpiryRequired')
       if (!payment.cardCvv.trim()) {
-        next.cardCvv = 'Please enter the CVV'
+        next.cardCvv = t('checkout.errors.cardCvvRequired')
       } else if (payment.cardCvv.replace(/\D/g, '').length !== 3) {
-        next.cardCvv = 'CVV must be 3 digits'
+        next.cardCvv = t('checkout.errors.cardCvvInvalid')
       }
     }
     return next
@@ -119,22 +127,24 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
   const saveBookingToBackend = async (booking) => {
     try {
       const user = auth.currentUser
-      if (!user) return
-      const token = await user.getIdToken()
+      const headers = { 'Content-Type': 'application/json' }
+      if (user) {
+        const token = await user.getIdToken()
+        headers.Authorization = `Bearer ${token}`
+      }
       const res = await fetch(`${API_URL}/api/bookings`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
+        headers,
         body: JSON.stringify(booking)
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error || 'Booking sync failed')
       }
+      return await res.json().catch(() => ({}))
     } catch (err) {
       console.warn('Failed to sync booking to backend:', err.message)
+      return {}
     }
   }
 
@@ -146,6 +156,7 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
       return
     }
     setErrors({})
+    setPayment((prev) => ({ ...prev, email: details.email }))
     setStep(2)
   }
 
@@ -159,11 +170,11 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
 
     setIsLoading(true)
 
-    setTimeout(() => {
-      cart.forEach((item) => {
+    setTimeout(async () => {
+      for (const item of cart) {
         const booking = {
           name: details.name,
-          email: details.email,
+          email: payment.email || details.email,
           phone: details.phone,
           district: details.district,
           sector: details.sector,
@@ -174,9 +185,10 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
           status: 'New',
           bookedAt: new Date().toISOString()
         }
+        const saved = await saveBookingToBackend(booking)
+        booking.id = saved.id || ''
         saveBooking(booking)
-        saveBookingToBackend(booking)
-      })
+      }
       localStorage.removeItem('cart')
       setIsLoading(false)
       if (onComplete) onComplete({ paymentMethod: payment.method, total })
@@ -186,9 +198,9 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
   const inputClass = 'w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all text-gray-700 placeholder-gray-400'
   const errorClass = 'text-red-500 text-sm mt-1'
   const paymentMethods = [
-    { id: 'airtel', label: 'Airtel Money', icon: FaMobileAlt, color: 'text-red-500' },
-    { id: 'momo', label: 'MTN MoMo', icon: FaPhone, color: 'text-yellow-500' },
-    { id: 'card', label: 'Bank Card', icon: FaCreditCard, color: 'text-blue-600' }
+    { id: 'airtel', label: t('checkout.airtelMoney'), icon: FaMobileAlt, color: 'text-red-500' },
+    { id: 'momo', label: t('checkout.mtnMomo'), icon: FaPhone, color: 'text-yellow-500' },
+    { id: 'card', label: t('checkout.bankCard'), icon: FaCreditCard, color: 'text-blue-600' }
   ]
 
   return (
@@ -196,6 +208,7 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
       <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden animate-slideUp my-3 sm:my-8 max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-4rem)] flex flex-col">
         <button
           onClick={onClose}
+          aria-label={t('aria.close')}
           className="absolute top-3 right-3 sm:top-4 sm:right-4 text-gray-400 hover:text-gray-600 transition-colors z-10 w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -207,10 +220,10 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
           {/* Steps indicator */}
           <div className="flex items-center justify-center gap-2 mb-5 sm:mb-6">
             <span className={`w-2.5 h-2.5 rounded-full ${step >= 1 ? 'bg-primary' : 'bg-gray-200'}`}></span>
-            <span className="text-xs text-gray-400 font-medium">Details</span>
+            <span className="text-xs text-gray-400 font-medium">{t('checkout.details')}</span>
             <span className="w-6 h-px bg-gray-200"></span>
             <span className={`w-2.5 h-2.5 rounded-full ${step >= 2 ? 'bg-primary' : 'bg-gray-200'}`}></span>
-            <span className="text-xs text-gray-400 font-medium">Payment</span>
+            <span className="text-xs text-gray-400 font-medium">{t('checkout.payment')}</span>
           </div>
 
           {step === 1 && (
@@ -219,21 +232,21 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
                 <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto bg-primary rounded-xl flex items-center justify-center text-white text-xl sm:text-2xl shadow-lg shadow-primary/30">
                   <FaMapMarkerAlt />
                 </div>
-                <h2 className="mt-3 sm:mt-4 text-xl sm:text-2xl font-bold text-gray-800">Delivery Details</h2>
-                <p className="text-gray-500 text-xs sm:text-sm">Fill in where we should deliver your books</p>
+                <h2 className="mt-3 sm:mt-4 text-xl sm:text-2xl font-bold text-gray-800">{t('checkout.deliveryTitle')}</h2>
+                <p className="text-gray-500 text-xs sm:text-sm">{t('checkout.deliverySubtitle')}</p>
               </div>
 
               <form onSubmit={handleDetailsSubmit} className="space-y-5">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-2">
-                    <FaUser className="text-primary/60" /> Full Name
+                    <FaUser className="text-primary/60" /> {t('checkout.fullName')}
                   </label>
                   <input
                     type="text"
                     name="name"
                     value={details.name}
                     onChange={changeDetails}
-                    placeholder="e.g. Jean Pierre"
+                    placeholder={t('checkout.namePlaceholder')}
                     className={inputClass}
                   />
                   {errors.name && <p className={errorClass}>{errors.name}</p>}
@@ -241,14 +254,14 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-2">
-                    <FaEnvelope className="text-primary/60" /> Email Address
+                    <FaEnvelope className="text-primary/60" /> {t('checkout.emailAddress')}
                   </label>
                   <input
                     type="email"
                     name="email"
                     value={details.email}
                     onChange={changeDetails}
-                    placeholder="you@email.com"
+                    placeholder={t('checkout.emailPlaceholder')}
                     className={inputClass}
                   />
                   {errors.email && <p className={errorClass}>{errors.email}</p>}
@@ -256,14 +269,14 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-2">
-                    <FaPhone className="text-primary/60" /> Phone Number
+                    <FaPhone className="text-primary/60" /> {t('checkout.phoneNumber')}
                   </label>
                   <input
                     type="tel"
                     name="phone"
                     value={details.phone}
                     onChange={changeDetails}
-                    placeholder="+250 7XX XXX XXX"
+                    placeholder={t('checkout.phonePlaceholder')}
                     className={inputClass}
                   />
                   {errors.phone && <p className={errorClass}>{errors.phone}</p>}
@@ -271,7 +284,7 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-2">
-                    <FaMapMarkerAlt className="text-primary/60" /> District
+                    <FaMapMarkerAlt className="text-primary/60" /> {t('checkout.district')}
                   </label>
                   <select
                     name="district"
@@ -279,7 +292,7 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
                     onChange={changeDetails}
                     className={`${inputClass} cursor-pointer`}
                   >
-                    <option value="">Select your district</option>
+                    <option value="">{t('checkout.selectDistrict')}</option>
                     {districts.map((d) => (
                       <option key={d.name} value={d.name}>{d.name}</option>
                     ))}
@@ -289,7 +302,7 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-2">
-                    <FaMapMarkerAlt className="text-primary/60" /> Sector
+                    <FaMapMarkerAlt className="text-primary/60" /> {t('checkout.sector')}
                   </label>
                   <select
                     name="sector"
@@ -299,7 +312,7 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
                     className={`${inputClass} cursor-pointer disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed`}
                   >
                     <option value="">
-                      {details.district ? 'Select your sector' : 'Select a district first'}
+                      {details.district ? t('checkout.selectSector') : t('checkout.selectDistrictFirst')}
                     </option>
                     {sectors.map((s) => (
                       <option key={s} value={s}>{s}</option>
@@ -312,7 +325,7 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
                   type="submit"
                   className="w-full py-4 rounded-xl bg-blue-600 text-white font-semibold text-lg transition-all hover:bg-blue-700 hover:scale-[1.02] shadow-lg shadow-blue-600/30"
                 >
-                  Continue to Payment
+                  {t('checkout.continueToPayment')}
                 </button>
               </form>
             </>
@@ -324,13 +337,13 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
                 <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto bg-primary rounded-xl flex items-center justify-center text-white text-xl sm:text-2xl shadow-lg shadow-primary/30">
                   <FaLock />
                 </div>
-                <h2 className="mt-3 sm:mt-4 text-xl sm:text-2xl font-bold text-gray-800">Payment</h2>
-                <p className="text-gray-500 text-xs sm:text-sm">Choose how you want to pay</p>
+                <h2 className="mt-3 sm:mt-4 text-xl sm:text-2xl font-bold text-gray-800">{t('checkout.paymentTitle')}</h2>
+                <p className="text-gray-500 text-xs sm:text-sm">{t('checkout.paymentSubtitle')}</p>
               </div>
 
               {/* Order summary */}
               <div className="bg-gray-50 rounded-xl border border-gray-100 p-4 mb-5">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Order Summary</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">{t('checkout.orderSummary')}</p>
                 <div className="space-y-2 max-h-32 overflow-y-auto">
                   {cart.map((item) => (
                     <div key={item.book.id} className="flex items-center justify-between text-sm">
@@ -344,12 +357,31 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
                   ))}
                 </div>
                 <div className="flex items-center justify-between border-t border-gray-200 mt-3 pt-3">
-                  <span className="text-sm font-semibold text-gray-700">Total</span>
+                  <span className="text-sm font-semibold text-gray-700">{t('checkout.total')}</span>
                   <span className="text-lg font-bold text-primary">{formatPrice(total)}</span>
                 </div>
               </div>
 
               <form onSubmit={handlePaymentSubmit} className="space-y-5">
+                {/* Email for confirmation */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-2">
+                    <FaEnvelope className="text-primary/60" /> {t('checkout.emailForConfirmation')}
+                  </label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={payment.email}
+                    onChange={changePayment}
+                    placeholder={t('checkout.emailPlaceholder')}
+                    className={inputClass}
+                  />
+                  <p className="text-xs text-gray-400 mt-2">
+                    {t('checkout.emailHint')}
+                  </p>
+                  {errors.email && <p className={errorClass}>{errors.email}</p>}
+                </div>
+
                 {/* Method selection */}
                 <div className="grid grid-cols-3 gap-2">
                   {paymentMethods.map((m) => (
@@ -375,36 +407,36 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
                 {payment.method === 'airtel' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-2">
-                      <FaMobileAlt className="text-red-500" /> Airtel Money Number
+                      <FaMobileAlt className="text-red-500" /> {t('checkout.airtelNumber')}
                     </label>
                     <input
                       type="tel"
                       name="airtelPhone"
                       value={payment.airtelPhone}
                       onChange={changePayment}
-                      placeholder="+250 7XX XXX XXX"
+                      placeholder={t('checkout.phonePlaceholder')}
                       className={inputClass}
                     />
                     {errors.airtelPhone && <p className={errorClass}>{errors.airtelPhone}</p>}
-                    <p className="text-xs text-gray-400 mt-2">You will receive a prompt on your phone to approve the payment.</p>
+                    <p className="text-xs text-gray-400 mt-2">{t('checkout.approvePrompt')}</p>
                   </div>
                 )}
 
                 {payment.method === 'momo' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-2">
-                      <FaPhone className="text-yellow-500" /> MTN MoMo Number
+                      <FaPhone className="text-yellow-500" /> {t('checkout.momoNumber')}
                     </label>
                     <input
                       type="tel"
                       name="momoPhone"
                       value={payment.momoPhone}
                       onChange={changePayment}
-                      placeholder="+250 7XX XXX XXX"
+                      placeholder={t('checkout.phonePlaceholder')}
                       className={inputClass}
                     />
                     {errors.momoPhone && <p className={errorClass}>{errors.momoPhone}</p>}
-                    <p className="text-xs text-gray-400 mt-2">You will receive a prompt on your phone to approve the payment.</p>
+                    <p className="text-xs text-gray-400 mt-2">{t('checkout.approvePrompt')}</p>
                   </div>
                 )}
 
@@ -412,14 +444,14 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
                   <>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-2">
-                        <FaUser className="text-primary/60" /> Card Holder Name
+                        <FaUser className="text-primary/60" /> {t('checkout.cardHolderName')}
                       </label>
                       <input
                         type="text"
                         name="cardName"
                         value={payment.cardName}
                         onChange={changePayment}
-                        placeholder="Name on the card"
+                        placeholder={t('checkout.nameOnCard')}
                         className={inputClass}
                       />
                       {errors.cardName && <p className={errorClass}>{errors.cardName}</p>}
@@ -427,7 +459,7 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1.5 flex items-center gap-2">
-                        <FaCreditCard className="text-blue-600" /> Card Number
+                        <FaCreditCard className="text-blue-600" /> {t('checkout.cardNumber')}
                       </label>
                       <input
                         type="text"
@@ -442,7 +474,7 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Expiry Date</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('checkout.expiryDate')}</label>
                         <input
                           type="text"
                           name="cardExpiry"
@@ -454,7 +486,7 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
                         {errors.cardExpiry && <p className={errorClass}>{errors.cardExpiry}</p>}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1.5">CVV</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('checkout.cvv')}</label>
                         <input
                           type="password"
                           name="cardCvv"
@@ -476,7 +508,7 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
                     onClick={() => setStep(1)}
                     className="px-5 py-4 rounded-xl border border-gray-200 text-gray-600 font-semibold transition-all hover:bg-gray-50 flex items-center gap-2"
                   >
-                    <FaChevronLeft className="text-xs" /> Back
+                    <FaChevronLeft className="text-xs" /> {t('checkout.back')}
                   </button>
                   <button
                     type="submit"
@@ -491,10 +523,10 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        Processing...
+                        {t('checkout.processing')}
                       </>
                     ) : (
-                      <>Pay {formatPrice(total)}</>
+                      <>{t('checkout.pay', { total: formatPrice(total) })}</>
                     )}
                   </button>
                 </div>
