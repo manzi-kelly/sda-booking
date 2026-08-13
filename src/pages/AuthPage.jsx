@@ -18,7 +18,7 @@ import WelcomeScreen from "../components/WelcomeScreen";
 import OtpInput from "../components/OtpInput";
 import { useLanguage } from "../i18n/LanguageContext.jsx";
 
-const API_URL = "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const AuthPage = ({ onClose }) => {
   const { t } = useLanguage();
