@@ -199,7 +199,7 @@ const BookingForm = ({ book, onClose, onSubmit }) => {
             <button
               type="submit"
               disabled={isLoading}
-              className={`w-full py-4 rounded-xl bg-blue-600 text-white font-semibold text-lg transition-all hover:bg-blue-700 hover:scale-[1.02] shadow-lg shadow-blue-600/30 ${
+              className={`w-full py-4 rounded-xl btn-primary text-white font-semibold text-lg transition-all hover:scale-[1.02] shadow-lg shadow-black/20 ${
                 isLoading ? 'opacity-70 cursor-not-allowed' : ''
               }`}
             >

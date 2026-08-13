@@ -65,7 +65,7 @@ const SearchOverlay = ({ onClose, onSelectBook }) => {
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return books
+    if (!q) return []
     return books.filter((b) =>
       [b.title, b.author, b.category, b.description]
         .filter(Boolean)
@@ -162,7 +162,7 @@ const SearchOverlay = ({ onClose, onSelectBook }) => {
                   </div>
                   <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                     <span className="text-sm font-bold text-gray-900">{formatPrice(book.price)}</span>
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold group-hover:bg-blue-700 transition-colors">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg btn-primary text-white text-xs font-semibold transition-colors">
                       <FaShoppingCart className="text-[10px]" />
                       {t('nav.bookNow')}
                     </span>

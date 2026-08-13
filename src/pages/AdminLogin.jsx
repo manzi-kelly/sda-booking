@@ -109,7 +109,7 @@ const AdminLogin = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3.5 rounded-xl bg-primary text-white font-semibold transition-all hover:bg-primary/90 hover:scale-[1.01] shadow-lg shadow-primary/30 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full py-3.5 rounded-xl btn-primary text-white font-semibold transition-all hover:scale-[1.01] shadow-lg shadow-black/20 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {isLoading ? t('admin.signingIn') : t('admin.signIn')}
             </button>

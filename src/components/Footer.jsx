@@ -47,16 +47,16 @@ const Footer = () => {
               {t('footer.description')}
             </p>
             <div className="flex gap-3">
-              <a href="#" onClick={(e) => e.preventDefault()} aria-label="Facebook" className="w-9 h-9 rounded-full bg-gray-800 hover:bg-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
+              <a href="#" onClick={(e) => e.preventDefault()} aria-label="Facebook" className="w-9 h-9 rounded-full btn-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
                 <FaFacebookF size={14} />
               </a>
-              <a href="#" onClick={(e) => e.preventDefault()} aria-label="Twitter" className="w-9 h-9 rounded-full bg-gray-800 hover:bg-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
+              <a href="#" onClick={(e) => e.preventDefault()} aria-label="Twitter" className="w-9 h-9 rounded-full btn-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
                 <FaTwitter size={14} />
               </a>
-              <a href="#" onClick={(e) => e.preventDefault()} aria-label="Instagram" className="w-9 h-9 rounded-full bg-gray-800 hover:bg-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
+              <a href="#" onClick={(e) => e.preventDefault()} aria-label="Instagram" className="w-9 h-9 rounded-full btn-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
                 <FaInstagram size={14} />
               </a>
-              <a href="#" onClick={(e) => e.preventDefault()} aria-label="LinkedIn" className="w-9 h-9 rounded-full bg-gray-800 hover:bg-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
+              <a href="#" onClick={(e) => e.preventDefault()} aria-label="LinkedIn" className="w-9 h-9 rounded-full btn-primary text-gray-400 hover:text-white flex items-center justify-center transition-all duration-300">
                 <FaLinkedinIn size={14} />
               </a>
             </div>
@@ -115,7 +115,7 @@ const Footer = () => {
               />
               <button
                 type="submit"
-                className="px-4 py-2.5 rounded-lg bg-primary text-white font-semibold hover:bg-primary/90 transition-colors"
+                className="px-4 py-2.5 rounded-lg btn-primary text-white font-semibold transition-colors"
               >
                 {t('footer.subscribe')}
               </button>

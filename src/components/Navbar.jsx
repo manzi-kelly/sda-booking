@@ -155,8 +155,8 @@ const Navbar = () => {
               onClick={handleBookNow}
               className={`px-6 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 hover:scale-105 hover:shadow-lg ${
                 isScrolled 
-                  ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/30' 
-                  : 'bg-blue-600 text-white hover:bg-blue-700'
+                  ? 'btn-primary text-white shadow-black/20' 
+                  : 'btn-primary text-white'
               }`}
             >
               {t('nav.bookNow')}
@@ -237,7 +237,7 @@ const Navbar = () => {
             <LanguageSwitcher variant={isScrolled ? 'light' : 'dark'} />
             <button
               onClick={handleBookNow}
-              className={`px-8 py-3.5 rounded-full text-base font-semibold transition-all duration-300 inline-block hover:scale-105 hover:shadow-xl mt-4 w-full text-center bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/30`}
+              className={`px-8 py-3.5 rounded-full text-base font-semibold transition-all duration-300 inline-block hover:scale-105 hover:shadow-xl mt-4 w-full text-center btn-primary text-white shadow-lg shadow-black/20`}
             >
               {t('nav.bookNow')}
             </button>

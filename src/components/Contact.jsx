@@ -134,7 +134,7 @@ const Contact = () => {
                   href="#"
                   onClick={(e) => e.preventDefault()}
                   aria-label="Facebook"
-                  className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center hover:scale-110 transition"
+                  className="w-12 h-12 rounded-full btn-primary text-white flex items-center justify-center hover:scale-110 transition"
                 >
                   <FaFacebookF />
                 </a>
@@ -143,7 +143,7 @@ const Contact = () => {
                   href="#"
                   onClick={(e) => e.preventDefault()}
                   aria-label="Instagram"
-                  className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center hover:scale-110 transition"
+                  className="w-12 h-12 rounded-full btn-primary text-white flex items-center justify-center hover:scale-110 transition"
                 >
                   <FaInstagram />
                 </a>
@@ -152,7 +152,7 @@ const Contact = () => {
                   href="#"
                   onClick={(e) => e.preventDefault()}
                   aria-label="LinkedIn"
-                  className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center hover:scale-110 transition"
+                  className="w-12 h-12 rounded-full btn-primary text-white flex items-center justify-center hover:scale-110 transition"
                 >
                   <FaLinkedinIn />
                 </a>
@@ -201,7 +201,7 @@ const Contact = () => {
 
                 <button
                   type="submit"
-                  className="flex items-center gap-3 bg-primary text-white px-8 py-4 rounded-xl hover:scale-105 transition"
+                  className="flex items-center gap-3 btn-primary text-white px-8 py-4 rounded-xl hover:scale-105 transition"
                 >
                   <FaPaperPlane />
                   {t("contact.send")}

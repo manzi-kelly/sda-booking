@@ -79,7 +79,7 @@ const BookCard = ({ book, onBookNow }) => {
 
           <button
             onClick={() => onBookNow(book)}
-            className="w-full py-3 rounded-xl bg-blue-600 text-white font-semibold text-sm transition-all hover:bg-blue-700 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2"
+            className="w-full py-3 rounded-xl btn-primary text-white font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-black/20 flex items-center justify-center gap-2"
           >
             <FaShoppingCart className="text-sm" />
             {t('dashboard.bookNow')}

@@ -323,7 +323,7 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
 
                 <button
                   type="submit"
-                  className="w-full py-4 rounded-xl bg-blue-600 text-white font-semibold text-lg transition-all hover:bg-blue-700 hover:scale-[1.02] shadow-lg shadow-blue-600/30"
+                  className="w-full py-4 rounded-xl btn-primary text-white font-semibold text-lg transition-all hover:scale-[1.02] shadow-lg shadow-black/20"
                 >
                   {t('checkout.continueToPayment')}
                 </button>
@@ -513,7 +513,7 @@ const CheckoutForm = ({ cart, onClose, onComplete }) => {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className={`flex-1 py-4 rounded-xl bg-blue-600 text-white font-semibold text-lg transition-all hover:bg-blue-700 hover:scale-[1.02] shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 ${
+                    className={`flex-1 py-4 rounded-xl btn-primary text-white font-semibold text-lg transition-all hover:scale-[1.02] shadow-lg shadow-black/20 flex items-center justify-center gap-2 ${
                       isLoading ? 'opacity-70 cursor-not-allowed' : ''
                     }`}
                   >

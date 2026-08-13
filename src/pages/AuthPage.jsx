@@ -375,7 +375,7 @@ const AuthPage = ({ onClose }) => {
                 <button
                   onClick={verifyOtp}
                   disabled={isLoading}
-                  className="w-full py-3.5 rounded-xl bg-primary text-white font-semibold transition-all hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full py-3.5 rounded-xl btn-primary text-white font-semibold transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isLoading ? <Spinner /> : t("auth.verify")}
                 </button>
@@ -425,7 +425,7 @@ const AuthPage = ({ onClose }) => {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-3.5 rounded-xl bg-primary text-white font-semibold transition-all hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full py-3.5 rounded-xl btn-primary text-white font-semibold transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isLoading ? <Spinner /> : t("auth.updatePassword")}
                 </button>
@@ -498,7 +498,7 @@ const AuthPage = ({ onClose }) => {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-3.5 rounded-xl bg-emerald-600 text-white font-semibold transition-all hover:bg-emerald-700 hover:scale-[1.02] shadow-lg shadow-emerald-600/30 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full py-3.5 rounded-xl btn-primary text-white font-semibold transition-all hover:scale-[1.02] shadow-lg shadow-black/20 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isLoading ? <Spinner /> : (
                     <>{t("auth.sendCode")} <FaPaperPlane className="text-sm" /></>
@@ -548,7 +548,7 @@ const AuthPage = ({ onClose }) => {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-3.5 rounded-xl bg-primary text-white font-semibold transition-all hover:bg-primary/90 hover:scale-[1.02] shadow-lg shadow-primary/30 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full py-3.5 rounded-xl btn-primary text-white font-semibold transition-all hover:scale-[1.02] shadow-lg shadow-black/20 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isLoading ? <Spinner /> : mode === "forgot" ? t("auth.sendCode") : t("auth.login")}
                 </button>

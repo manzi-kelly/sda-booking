@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Primary button gradient */
+.btn-primary {
+  background: linear-gradient(180deg, #001833 0%, #00162b 55%, #001123 100%);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(180deg, #06203a 0%, #051c31 55%, #041829 100%);
+}
+
 html {
   scroll-behavior: smooth;
 }

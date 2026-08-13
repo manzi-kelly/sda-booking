@@ -66,7 +66,7 @@ const Hero = () => {
             <button
               type="button"
               onClick={() => setShowAuth(true)}
-              className="mt-8 inline-flex items-center gap-3 rounded-full bg-[#f4b942] px-7 py-4 font-semibold text-[#071b2d] shadow-lg shadow-black/20 transition-all duration-300 hover:bg-white hover:scale-105 active:scale-95"
+              className="mt-8 inline-flex items-center gap-3 rounded-full btn-primary px-7 py-4 font-semibold text-white shadow-lg shadow-black/20 transition-all duration-300 hover:scale-105 active:scale-95"
             >
               {t('hero.explore')}
               <FaArrowRight size={13} />
