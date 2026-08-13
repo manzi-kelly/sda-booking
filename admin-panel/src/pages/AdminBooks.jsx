@@ -154,6 +154,10 @@ const AdminBooks = () => {
   const [imageError, setImageError] = useState('')
   const fileInputRef = useRef(null)
 
+  const [categories, setCategories] = useState([])
+  const [categoryMode, setCategoryMode] = useState('select')
+  const [bookCategoryFilter, setBookCategoryFilter] = useState('All')
+
   if (localStorage.getItem('isAdminLoggedIn') !== 'true') {
     return <Navigate to="/admin" replace />
   }
@@ -177,6 +181,51 @@ const AdminBooks = () => {
   useEffect(() => {
     loadBooks()
   }, [])
+
+  const loadCategories = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/categories`)
+      const data = await res.json().catch(() => [])
+      setCategories(Array.isArray(data) ? data : [])
+    } catch {
+      setCategories([])
+    }
+  }
+
+  useEffect(() => {
+    loadCategories()
+    let source
+    try {
+      source = new EventSource(`${API_URL}/api/categories/events`)
+      source.addEventListener('categories-changed', () => loadCategories())
+    } catch {
+      source = null
+    }
+    return () => {
+      if (source) source.close()
+    }
+  }, [])
+
+  const ensureCategory = (name) => {
+    const trimmed = String(name || '').trim()
+    if (!trimmed) return Promise.resolve('General')
+    const existing = categories.find((c) => c.name.toLowerCase() === trimmed.toLowerCase())
+    if (existing) return Promise.resolve(existing.name)
+    return fetch(`${API_URL}/api/admin/categories`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('admin_token')}`
+      },
+      body: JSON.stringify({ name: trimmed })
+    })
+      .then((res) => (res.ok ? res.json() : { name: trimmed }))
+      .then((data) => {
+        loadCategories()
+        return data.name || trimmed
+      })
+      .catch(() => trimmed)
+  }
 
   useEffect(() => {
     let source
@@ -211,6 +260,16 @@ const AdminBooks = () => {
     [postedBooks, booksFromDb]
   )
 
+  const bookCategories = useMemo(() => {
+    const set = new Set(allBooks.map((b) => b.category || 'General').filter(Boolean))
+    for (const c of categories) set.add(c.name)
+    return ['All', ...set]
+  }, [allBooks, categories])
+
+  const filteredBooks = bookCategoryFilter === 'All'
+    ? allBooks
+    : allBooks.filter((b) => (b.category || 'General') === bookCategoryFilter)
+
   const openBookForm = () => {
     setEditingBook(null)
     setBookError('')
@@ -224,6 +283,7 @@ const AdminBooks = () => {
       copies: 1,
       price: ''
     })
+    setCategoryMode('select')
     setShowBookForm(true)
   }
 
@@ -240,6 +300,7 @@ const AdminBooks = () => {
       copies: Number(book.copies) || 1,
       price: Number(book.price) || ''
     })
+    setCategoryMode(book.category ? 'select' : 'new')
     setShowBookForm(true)
   }
 
@@ -279,10 +340,11 @@ const AdminBooks = () => {
 
     setPostingBook(true)
     setBookError('')
+    const resolvedCategory = await ensureCategory(bookForm.category)
     const payload = {
       title: bookForm.title,
       author: bookForm.author,
-      category: bookForm.category || 'General',
+      category: resolvedCategory,
       description: bookForm.description,
       image: imageData || (editingBook ? editingBook.image : ''),
       copies: Number(bookForm.copies) || 1,
@@ -414,6 +476,27 @@ const AdminBooks = () => {
           </button>
         </div>
 
+        {bookCategories.length > 1 && (
+          <div className="mb-6 flex flex-wrap gap-2">
+            {bookCategories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setBookCategoryFilter(cat)}
+                className={`px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                  bookCategoryFilter === cat
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:border-primary hover:text-primary'
+                }`}
+              >
+                {cat}
+                <span className="ml-1.5 opacity-70">
+                  {cat === 'All' ? allBooks.length : allBooks.filter((b) => (b.category || 'General') === cat).length}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center gap-3 py-16 text-gray-400">
             <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -424,7 +507,7 @@ const AdminBooks = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 lg:gap-6">
-            {allBooks.map((book) => (
+            {filteredBooks.map((book) => (
               <BookCard
                 key={book.id}
                 book={book}
@@ -492,12 +575,57 @@ const AdminBooks = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Category</label>
-                  <input
-                    value={bookForm.category}
-                    onChange={(e) => updateBookField('category', e.target.value)}
-                    placeholder="e.g. Devotional"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all text-sm text-gray-700 placeholder-gray-400"
-                  />
+                  {categoryMode === 'select' ? (
+                    <div className="flex gap-2">
+                      <select
+                        value={bookForm.category}
+                        onChange={(e) => {
+                          const value = e.target.value
+                          if (value === '__new__') {
+                            setCategoryMode('new')
+                            updateBookField('category', '')
+                            return
+                          }
+                          updateBookField('category', value)
+                        }}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all text-sm text-gray-700 bg-white"
+                      >
+                        <option value="">Select a category</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.name}>{c.name}</option>
+                        ))}
+                        <option value="__new__">＋ Create new category</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCategoryMode('new')
+                          updateBookField('category', '')
+                        }}
+                        className="shrink-0 px-3 rounded-xl border border-gray-200 text-gray-500 hover:text-primary hover:border-primary transition-colors"
+                        title="Create new category"
+                        aria-label="Create new category"
+                      >
+                        <FaPlus />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        value={bookForm.category}
+                        onChange={(e) => updateBookField('category', e.target.value)}
+                        placeholder="e.g. Youth (Genz)"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 outline-none focus:ring-4 focus:ring-primary/20 focus:border-primary transition-all text-sm text-gray-700 placeholder-gray-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setCategoryMode('select')}
+                        className="shrink-0 px-3 rounded-xl border border-gray-200 text-gray-500 hover:text-primary hover:border-primary transition-colors text-xs font-semibold"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Price (RWF) *</label>

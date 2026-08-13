@@ -241,7 +241,8 @@
     "statusProcessing": "Processing",
     "statusDelivered": "Delivered",
     "statusComplete": "Complete",
-    "statusCancelled": "Cancelled"
+    "statusCancelled": "Cancelled",
+    "allCategories": "All"
   },
   "booking": {
     "bookNow": "Book Now",
@@ -381,6 +382,10 @@
     "bookAuthorPlaceholder": "e.g. Ellen G. White",
     "bookCategory": "Category",
     "bookCategoryPlaceholder": "e.g. Spiritual",
+    "selectCategory": "Select a category",
+    "createNewCategory": "Create new category",
+    "newCategoryPlaceholder": "e.g. Youth (Genz)",
+    "categoryRequired": "Please choose or enter a category",
     "bookDescription": "Description",
     "bookDescriptionPlaceholder": "A short description of the book...",
     "bookImage": "Image URL",

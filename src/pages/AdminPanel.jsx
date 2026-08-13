@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
 import {
   FaSignOutAlt,
@@ -140,6 +140,10 @@ const AdminPanel = () => {
   const [notifyPhone, setNotifyPhone] = useState('')
   const [isNotifying, setIsNotifying] = useState(false)
 
+  const [categories, setCategories] = useState([])
+  const [categoryMode, setCategoryMode] = useState('select')
+  const [productCategory, setProductCategory] = useState('All')
+
   const mergeOrders = (local, remote) => {
     const map = new Map()
     const keyOf = (o) => o.id || `${toTimestamp(o.bookedAt || o.createdAt)}-${o.title}-${o.email}`
@@ -155,6 +159,31 @@ const AdminPanel = () => {
       .catch(() => setProducts([]))
   }
 
+  const fetchCategories = () => {
+    return fetch(`${API_URL}/api/categories`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((items) => setCategories(Array.isArray(items) ? items : []))
+      .catch(() => setCategories([]))
+  }
+
+  const adminTokenRef = useRef('')
+  useEffect(() => {
+    adminTokenRef.current = adminToken
+  }, [adminToken])
+
+  const refreshOrders = () => {
+    const token = adminTokenRef.current
+    if (!token) return Promise.resolve()
+    return fetch(`${API_URL}/api/admin/bookings`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((items) => {
+        if (Array.isArray(items)) setOrders((prev) => mergeOrders(prev, items))
+      })
+      .catch(() => {})
+  }
+
   useEffect(() => {
     try {
       const local = JSON.parse(localStorage.getItem('bookings')) || []
@@ -164,6 +193,7 @@ const AdminPanel = () => {
     }
 
     fetchProducts()
+    fetchCategories()
 
     fetch(`${API_URL}/api/admin/login`, {
       method: 'POST',
@@ -185,6 +215,59 @@ const AdminPanel = () => {
         }
       })
       .catch(() => {})
+
+    // Real-time: new/updated orders, books and categories appear without refresh.
+    let ordersSource = null
+    let booksSource = null
+    let categoriesSource = null
+
+    const openOrdersStream = () => {
+      try {
+        ordersSource = new EventSource(`${API_URL}/api/bookings/events`)
+        ordersSource.addEventListener('bookings-changed', refreshOrders)
+        ordersSource.onerror = () => {
+          if (ordersSource) {
+            ordersSource.close()
+            ordersSource = null
+          }
+        }
+      } catch {
+        ordersSource = null
+      }
+    }
+    openOrdersStream()
+
+    try {
+      booksSource = new EventSource(`${API_URL}/api/books/events`)
+      booksSource.addEventListener('books-changed', () => fetchProducts())
+      booksSource.onerror = () => {
+        if (booksSource) {
+          booksSource.close()
+          booksSource = null
+        }
+      }
+    } catch {
+      booksSource = null
+    }
+
+    try {
+      categoriesSource = new EventSource(`${API_URL}/api/categories/events`)
+      categoriesSource.addEventListener('categories-changed', () => fetchCategories())
+      categoriesSource.onerror = () => {
+        if (categoriesSource) {
+          categoriesSource.close()
+          categoriesSource = null
+        }
+      }
+    } catch {
+      categoriesSource = null
+    }
+
+    return () => {
+      if (ordersSource) ordersSource.close()
+      if (booksSource) booksSource.close()
+      if (categoriesSource) categoriesSource.close()
+    }
   }, [])
 
   useEffect(() => {
@@ -300,6 +383,7 @@ const AdminPanel = () => {
       price: ''
     })
     setBookErrors({})
+    setCategoryMode('select')
     setShowBookForm(true)
   }
 
@@ -316,6 +400,7 @@ const AdminPanel = () => {
       price: book.price != null ? Number(book.price) : ''
     })
     setBookErrors({})
+    setCategoryMode(book.category ? 'select' : 'new')
     setShowBookForm(true)
   }
 
@@ -325,6 +410,27 @@ const AdminPanel = () => {
     setBookErrors((prev) => ({ ...prev, [name]: '' }))
   }
 
+  const ensureCategory = (name) => {
+    const trimmed = String(name || '').trim()
+    if (!trimmed) return Promise.resolve('General')
+    const existing = categories.find((c) => c.name.toLowerCase() === trimmed.toLowerCase())
+    if (existing) return Promise.resolve(existing.name)
+    return fetch(`${API_URL}/api/admin/categories`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminTokenRef.current}`
+      },
+      body: JSON.stringify({ name: trimmed })
+    })
+      .then((res) => (res.ok ? res.json() : { name: trimmed }))
+      .then((data) => {
+        fetchCategories()
+        return data.name || trimmed
+      })
+      .catch(() => trimmed)
+  }
+
   const submitBook = (e) => {
     e.preventDefault()
     const next = {}
@@ -332,46 +438,50 @@ const AdminPanel = () => {
     if (bookForm.price === '' || isNaN(Number(bookForm.price)) || Number(bookForm.price) < 0) {
       next.price = t('admin.priceRequired')
     }
+    const categoryInput = String(bookForm.category || '').trim()
+    if (categoryMode === 'new' && !categoryInput) next.category = t('admin.categoryRequired')
     if (Object.keys(next).length > 0) {
       setBookErrors(next)
       return
     }
 
-    const payload = {
-      title: bookForm.title.trim(),
-      author: bookForm.author.trim(),
-      category: bookForm.category.trim() || 'General',
-      description: bookForm.description.trim(),
-      image: bookForm.image.trim(),
-      gradient: bookForm.gradient,
-      copies: Math.max(1, Number(bookForm.copies) || 1),
-      price: Number(bookForm.price)
-    }
+    ensureCategory(categoryInput).then((resolvedCategory) => {
+      const payload = {
+        title: bookForm.title.trim(),
+        author: bookForm.author.trim(),
+        category: resolvedCategory,
+        description: bookForm.description.trim(),
+        image: bookForm.image.trim(),
+        gradient: bookForm.gradient,
+        copies: Math.max(1, Number(bookForm.copies) || 1),
+        price: Number(bookForm.price)
+      }
 
-    const url = editingBook
-      ? `${API_URL}/api/admin/books/${editingBook.id}`
-      : `${API_URL}/api/admin/books`
-    const method = editingBook ? 'PATCH' : 'POST'
+      const url = editingBook
+        ? `${API_URL}/api/admin/books/${editingBook.id}`
+        : `${API_URL}/api/admin/books`
+      const method = editingBook ? 'PATCH' : 'POST'
 
-    fetch(url, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${adminToken}`
-      },
-      body: JSON.stringify(payload)
+      return fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminTokenRef.current}`
+        },
+        body: JSON.stringify(payload)
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!data) throw new Error('Failed to save book')
+          setShowBookForm(false)
+          fetchProducts()
+          setToast({ type: 'success', text: t('admin.bookSaved') })
+        })
+        .catch((err) => {
+          console.warn('Failed to save book:', err.message)
+          setToast({ type: 'danger', text: err.message })
+        })
     })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!data) throw new Error('Failed to save book')
-        setShowBookForm(false)
-        fetchProducts()
-        setToast({ type: 'success', text: t('admin.bookSaved') })
-      })
-      .catch((err) => {
-        console.warn('Failed to save book:', err.message)
-        setToast({ type: 'danger', text: err.message })
-      })
   }
 
   const deleteBook = (book) => {
@@ -416,6 +526,16 @@ const AdminPanel = () => {
     const matchesSearch = !query || haystack.includes(query)
     return matchesSearch && matchesOrderTab(o, orderTab)
   })
+
+  const productCategories = useMemo(() => {
+    const set = new Set(products.map((b) => b.category || 'General').filter(Boolean))
+    for (const c of categories) set.add(c.name)
+    return ['All', ...set]
+  }, [products, categories])
+
+  const filteredProducts = productCategory === 'All'
+    ? products
+    : products.filter((b) => (b.category || 'General') === productCategory)
 
   const StatCard = ({ icon, label, value, color }) => (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5 flex items-center gap-3 sm:gap-4">
@@ -676,6 +796,28 @@ const AdminPanel = () => {
               </button>
             </div>
 
+            {/* Category filter */}
+            {productCategories.length > 1 && (
+              <div className="px-4 sm:px-6 py-3 flex flex-wrap gap-2 border-b border-gray-100">
+                {productCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setProductCategory(cat)}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                      productCategory === cat
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {cat === 'All' ? t('admin.tabAll') : cat}
+                    <span className="ml-1.5 opacity-70">
+                      {cat === 'All' ? products.length : products.filter((b) => (b.category || 'General') === cat).length}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {products.length === 0 ? (
               <div className="text-center py-16 px-4">
                 <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-4">
@@ -697,7 +839,7 @@ const AdminPanel = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {products.map((book) => (
+                    {filteredProducts.map((book) => (
                       <tr key={book.id} className="hover:bg-gray-50/70 transition-colors align-top">
                         <td className="px-4 sm:px-6 py-4">
                           <div className="flex items-center gap-3">
@@ -810,14 +952,61 @@ const AdminPanel = () => {
                   </div>
                   <div>
                     <label className={labelClass}>{t('admin.bookCategory')}</label>
-                    <input
-                      type="text"
-                      name="category"
-                      value={bookForm.category}
-                      onChange={changeBookForm}
-                      placeholder={t('admin.bookCategoryPlaceholder')}
-                      className={inputClass}
-                    />
+                    {categoryMode === 'select' ? (
+                      <div className="flex gap-2">
+                        <select
+                          name="category"
+                          value={bookForm.category}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            if (value === '__new__') {
+                              setCategoryMode('new')
+                              setBookForm((prev) => ({ ...prev, category: '' }))
+                              return
+                            }
+                            changeBookForm(e)
+                          }}
+                          className={inputClass}
+                        >
+                          <option value="">{t('admin.selectCategory')}</option>
+                          {categories.map((c) => (
+                            <option key={c.id} value={c.name}>{c.name}</option>
+                          ))}
+                          <option value="__new__">＋ {t('admin.createNewCategory')}</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCategoryMode('new')
+                            setBookForm((prev) => ({ ...prev, category: '' }))
+                          }}
+                          className="shrink-0 px-3 rounded-xl border border-gray-200 text-gray-500 hover:text-primary hover:border-primary transition-colors"
+                          title={t('admin.createNewCategory')}
+                          aria-label={t('admin.createNewCategory')}
+                        >
+                          <FaPlus />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          name="category"
+                          value={bookForm.category}
+                          onChange={changeBookForm}
+                          placeholder={t('admin.newCategoryPlaceholder')}
+                          className={inputClass}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setCategoryMode('select')}
+                          className="shrink-0 px-3 rounded-xl border border-gray-200 text-gray-500 hover:text-primary hover:border-primary transition-colors text-xs font-semibold"
+                        >
+                          {t('admin.cancel')}
+                        </button>
+                      </div>
+                    )}
+                    {bookErrors.category && <p className={errorClass}>{bookErrors.category}</p>}
                   </div>
                 </div>
 

@@ -24,7 +24,7 @@ import {
   FaPlus,
   FaSpinner
 } from 'react-icons/fa'
-import { adminFetch, clearAdminSession } from '../config/api'
+import { adminFetch, clearAdminSession, API_URL } from '../config/api'
 
 const formatPrice = (n) => 'RWF ' + Number(n || 0).toLocaleString()
 
@@ -103,8 +103,39 @@ const AdminPanel = () => {
     }
   }
 
+  const refreshOrders = async () => {
+    try {
+      const items = await adminFetch('/api/admin/bookings')
+      setOrders(items)
+    } catch (err) {
+      if (err.status === 401) {
+        clearAdminSession()
+        navigate('/admin', { replace: true })
+      }
+    }
+  }
+
   useEffect(() => {
     loadOrders()
+  }, [])
+
+  useEffect(() => {
+    let source
+    try {
+      source = new EventSource(`${API_URL}/api/bookings/events`)
+      source.addEventListener('bookings-changed', () => refreshOrders())
+      source.onerror = () => {
+        if (source) {
+          source.close()
+          source = null
+        }
+      }
+    } catch {
+      source = null
+    }
+    return () => {
+      if (source) source.close()
+    }
   }, [])
 
   useEffect(() => {

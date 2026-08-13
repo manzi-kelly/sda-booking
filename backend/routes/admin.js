@@ -2,13 +2,14 @@ import { Router } from 'express'
 import crypto from 'crypto'
 import admin from 'firebase-admin'
 import { db } from '../config/firebase.js'
-import { broadcastBooksChanged } from '../lib/broadcast.js'
+import { broadcastBooksChanged, broadcastBookingsChanged, broadcastCategoriesChanged } from '../lib/broadcast.js'
 import { sendBookArrived, sendBookArrivedToAdmin } from '../lib/mailer.js'
 import { sendBookArrivedSms } from '../lib/sms.js'
 
 const router = Router()
 const bookingsCol = db.collection('bookings')
 const booksCol = db.collection('books')
+const categoriesCol = db.collection('categories')
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'manzikelly07@gmail.com').trim().toLowerCase()
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '123'
@@ -180,6 +181,52 @@ router.delete('/books/:id', requireAdmin, async (req, res) => {
 })
 
 // ------------------------------------------------------------------
+// Categories
+// ------------------------------------------------------------------
+
+// POST /api/admin/categories - create a category (admin only)
+router.post('/categories', requireAdmin, async (req, res) => {
+  try {
+    const name = String(req.body.name || '').trim()
+    if (!name) {
+      return res.status(400).json({ error: 'Category name is required' })
+    }
+
+    const snapshot = await categoriesCol.where('name', '==', name).limit(1).get()
+    if (!snapshot.empty) {
+      const existing = snapshot.docs[0]
+      return res.status(200).json({ id: existing.id, name: existing.data().name })
+    }
+
+    const docRef = await categoriesCol.add({
+      name,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    })
+    broadcastCategoriesChanged({ action: 'create', id: docRef.id, name })
+    res.status(201).json({ id: docRef.id, name })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE /api/admin/categories/:id - remove a category (admin only)
+router.delete('/categories/:id', requireAdmin, async (req, res) => {
+  try {
+    const docRef = categoriesCol.doc(req.params.id)
+    const doc = await docRef.get()
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Category not found' })
+    }
+
+    await docRef.delete()
+    broadcastCategoriesChanged({ action: 'delete', id: req.params.id })
+    res.json({ id: req.params.id, deleted: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ------------------------------------------------------------------
 // GET /api/admin/bookings - list ALL bookings (admin only)
 // ------------------------------------------------------------------
 router.get('/bookings', requireAdmin, async (req, res) => {
@@ -241,6 +288,7 @@ router.patch('/bookings/:id', requireAdmin, async (req, res) => {
       }
     }
 
+    broadcastBookingsChanged({ action: 'update', id: req.params.id, status: nextStatus })
     res.json({ id: req.params.id, status: nextStatus })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -259,6 +307,7 @@ router.delete('/bookings/:id', requireAdmin, async (req, res) => {
     }
 
     await docRef.delete()
+    broadcastBookingsChanged({ action: 'delete', id: req.params.id })
     res.json({ id: req.params.id, deleted: true })
   } catch (err) {
     res.status(500).json({ error: err.message })

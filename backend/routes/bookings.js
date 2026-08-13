@@ -3,6 +3,7 @@ import admin from 'firebase-admin'
 import { verifyToken } from '../middleware/auth.js'
 import { db, auth } from '../config/firebase.js'
 import { sendBookingConfirmation } from '../lib/mailer.js'
+import { bookingsBus, BOOKINGS_EVENT, broadcastBookingsChanged } from '../lib/broadcast.js'
 
 const router = Router()
 const bookingsCol = db.collection('bookings')
@@ -46,6 +47,9 @@ router.post('/', async (req, res) => {
 
     const created = { id: docRef.id, ...booking }
 
+    // Tell every connected admin dashboard that a new order arrived.
+    broadcastBookingsChanged({ action: 'create', id: docRef.id })
+
     // Thank-you email (fire-and-forget; never fails the request).
     try {
       await sendBookingConfirmation(created)
@@ -57,6 +61,32 @@ router.post('/', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
+})
+
+// GET /api/bookings/events - Server-Sent Events stream so admin dashboards
+// refresh instantly whenever a booking is created or updated. It only emits
+// "something changed" signals (never booking data); clients re-fetch with auth.
+router.get('/events', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  })
+  res.write(': connected\n\n')
+
+  const onChanged = (data) => {
+    res.write(`event: ${BOOKINGS_EVENT}\ndata: ${JSON.stringify(data)}\n\n`)
+  }
+  bookingsBus.on(BOOKINGS_EVENT, onChanged)
+
+  const heartbeat = setInterval(() => res.write(': ping\n\n'), 25000)
+
+  req.on('close', () => {
+    clearInterval(heartbeat)
+    bookingsBus.off(BOOKINGS_EVENT, onChanged)
+    res.end()
+  })
 })
 
 // GET /api/bookings - list bookings for the authenticated user

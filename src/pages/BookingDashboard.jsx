@@ -106,6 +106,9 @@ const BookingDashboard = ({ user, onLogout }) => {
   const [fromDb, setFromDb] =
     useState(false);
 
+  const [activeCategory, setActiveCategory] =
+    useState('All');
+
   const bellRef = useRef(null);
 
   /*
@@ -423,6 +426,30 @@ const BookingDashboard = ({ user, onLogout }) => {
   const allBooks = fromDb
     ? postedBooks
     : mapBooks(fallbackBooks);
+
+  /*
+   * ==========================================================
+   * CATEGORIES
+   * ==========================================================
+   */
+
+  const bookCategories = (() => {
+    const set = new Set(
+      allBooks
+        .map((book) => book.category || 'Book')
+        .filter(Boolean)
+    );
+    return ['All', ...set];
+  })();
+
+  const visibleBooks =
+    activeCategory === 'All'
+      ? allBooks
+      : allBooks.filter(
+          (book) =>
+            (book.category || 'Book') ===
+            activeCategory
+        );
 
   /*
    * ==========================================================
@@ -875,10 +902,39 @@ const BookingDashboard = ({ user, onLogout }) => {
         )}
 
         {/* ====================================================
+            CATEGORY FILTER
+        ===================================================== */}
+
+        {bookCategories.length > 1 && (
+          <div className="mt-10 flex flex-wrap justify-center gap-2">
+
+            {bookCategories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() =>
+                  setActiveCategory(cat)
+                }
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition-all border ${
+                  activeCategory === cat
+                    ? 'bg-primary text-white border-primary shadow-md'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-primary hover:text-primary'
+                }`}
+              >
+                {cat === 'All'
+                  ? t('dashboard.allCategories')
+                  : cat}
+              </button>
+            ))}
+
+          </div>
+        )}
+
+        {/* ====================================================
             PRODUCT GRID
         ===================================================== */}
 
-        {allBooks.length === 0 ? (
+        {visibleBooks.length === 0 ? (
           <div className="mt-14 rounded-3xl border border-dashed border-gray-300 bg-gray-50 py-20 text-center">
 
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-gray-400 shadow-sm">
@@ -897,7 +953,7 @@ const BookingDashboard = ({ user, onLogout }) => {
         ) : (
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-6 mt-14">
 
-            {allBooks.map((book) => (
+            {visibleBooks.map((book) => (
               <div key={book.id} className="">
                 <BookCard
                   book={book}

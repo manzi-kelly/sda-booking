@@ -6,16 +6,18 @@ import bookingRoutes from './routes/bookings.js'
 import geoRoutes from './routes/geo.js'
 import adminRoutes from './routes/admin.js'
 import bookRoutes from './routes/books.js'
-import { seedDefaultBooks } from './seedBooks.js'
+import categoryRoutes from './routes/categories.js'
+import { seedDefaultBooks, seedDefaultCategories } from './seedBooks.js'
 
 const app = express()
 const PORT = process.env.PORT || 5000
 
-const corsOrigins = process.env.FRONTEND_ORIGIN
-  ? process.env.FRONTEND_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean)
-  : ['*']
+const rawOrigins = (process.env.FRONTEND_ORIGIN || '')
+  .split(',').map((s) => s.trim()).filter(Boolean)
 
-app.use(cors({ origin: corsOrigins }))
+const corsOrigins = rawOrigins.includes('*') ? '*' : rawOrigins
+
+app.use(cors(corsOrigins === '*' || corsOrigins.length === 0 ? undefined : { origin: corsOrigins }))
 app.use(express.json())
 
 app.get('/api/health', (req, res) => {
@@ -27,6 +29,7 @@ app.use('/api/bookings', bookingRoutes)
 app.use('/api/geo', geoRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/books', bookRoutes)
+app.use('/api/categories', categoryRoutes)
 
 app.use((err, req, res, next) => {
   console.error(err)
@@ -36,7 +39,13 @@ app.use((err, req, res, next) => {
 app.listen(PORT, async () => {
   console.log(`SDA Booking backend running on http://localhost:${PORT}`)
   const result = await seedDefaultBooks()
-  if (result.skipped) return
-  console.log(`Seeded ${result.seeded} default book(s) into Firestore.`)
+  if (result.skipped) {
+    console.log('Default books already seeded — skipping.')
+  } else if (result.seeded > 0) {
+    console.log(`Seeded ${result.seeded} default book(s) into Firestore.`)
+  }
   if (result.error) console.warn(result.error)
+  const catResult = await seedDefaultCategories()
+  if (catResult.seeded > 0) console.log(`Seeded ${catResult.seeded} default categorie(s).`)
+  if (catResult.error) console.warn(catResult.error)
 })
