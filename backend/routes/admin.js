@@ -4,6 +4,7 @@ import admin from 'firebase-admin'
 import { db } from '../config/firebase.js'
 import { broadcastBooksChanged } from '../lib/broadcast.js'
 import { sendBookArrived, sendBookArrivedToAdmin } from '../lib/mailer.js'
+import { sendBookArrivedSms } from '../lib/sms.js'
 
 const router = Router()
 const bookingsCol = db.collection('bookings')
@@ -196,7 +197,7 @@ router.get('/bookings', requireAdmin, async (req, res) => {
 // ------------------------------------------------------------------
 router.patch('/bookings/:id', requireAdmin, async (req, res) => {
   try {
-    const { status } = req.body
+    const { status, notifyEmail, notifyPhone } = req.body
     if (!status) {
       return res.status(400).json({ error: 'Status is required' })
     }
@@ -219,17 +220,24 @@ router.patch('/bookings/:id', requireAdmin, async (req, res) => {
     }
     await docRef.update(updates)
 
-    // When the book arrives at the church, notify the customer and the admin by email.
+    // When the book arrives at the church, notify the customer (by email
+    // and SMS) and the admin by email. Email/phone can be provided by the
+    // admin in the "Confirm & Notify" form, otherwise fall back to the
+    // contact details captured at checkout.
     if (isDelivery) {
       try {
         const updatedDoc = await docRef.get()
         if (updatedDoc.exists) {
           const data = { id: req.params.id, ...updatedDoc.data() }
-          await sendBookArrived(data)
+          const customerEmail = String(notifyEmail || data.email || '').trim()
+          const customerPhone = String(notifyPhone || data.phone || '').trim()
+
+          if (customerEmail) await sendBookArrived({ ...data, email: customerEmail })
           await sendBookArrivedToAdmin(data)
+          if (customerPhone) await sendBookArrivedSms({ ...data, phone: customerPhone })
         }
       } catch (err) {
-        console.warn('[admin] Arrival email failed:', err.message)
+        console.warn('[admin] Arrival notification failed:', err.message)
       }
     }
 
